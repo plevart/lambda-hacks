@@ -865,8 +865,6 @@ public interface Map<K,V> {
                 if (newValue != null) {
                     if ((oldValue = putIfAbsent(key, newValue)) == null)
                         return newValue;
-                    // else oldValue holds the non-null value for the key
-                    // installed concurrently by some other thread
                 }
                 else
                     return null;
