@@ -585,7 +585,9 @@ public interface Map<K,V> {
      *         (<a href="Collection.html#optional-restrictions">optional</a>)
      */
     default boolean remove(Object key, Object value) {
-        if (!containsKey(key) || !Objects.equals(get(key), value))
+        Object v;
+        if (!containsKey(key) ||
+            !((v = get(key)) == value || v != null && v.equals(value)))
             return false;
         remove(key);
         return true;
@@ -625,7 +627,9 @@ public interface Map<K,V> {
      *         or value prevents it from being stored in this map
      */
     default boolean replace(K key, V oldValue, V newValue) {
-        if (!containsKey(key) || !Objects.equals(get(key), oldValue))
+        Object v;
+        if (!containsKey(key) ||
+            !((v = get(key)) == oldValue || v != null && v.equals(oldValue)))
             return false;
         put(key, newValue);
         return true;
