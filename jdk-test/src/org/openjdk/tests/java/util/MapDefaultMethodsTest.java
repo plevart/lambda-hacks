@@ -20,6 +20,8 @@ public class MapDefaultMethodsTest {
             (k, v) -> v == null ? "x" + k : (v.length() < 6 ? v + "y" + k : null);
 
         assertEquals(map.size(), 0);
+        assertSame(map.compute(1, (k, v) -> null), null);
+        assertEquals(map.size(), 0);
         assertEquals(map.compute(1, remap), "x1");
         assertEquals(map.get(1), "x1");
         assertEquals(map.compute(1, remap), "x1y1");
@@ -40,6 +42,8 @@ public class MapDefaultMethodsTest {
         BiFunction<String, String, String> remap =
             (oldV, v) -> oldV.length() < 3 ? oldV + v : null;
 
+        assertEquals(map.size(), 0);
+        assertSame(map.merge(1, null, (oldV, v) -> null), null);
         assertEquals(map.size(), 0);
         assertEquals(map.merge(1, "x", remap), "x");
         assertEquals(map.get(1), "x");
