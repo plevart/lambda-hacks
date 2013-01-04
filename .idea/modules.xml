@@ -3,7 +3,7 @@
   <component name="ProjectModuleManager">
     <modules>
       <module fileurl="file://$PROJECT_DIR$/jdk/jdk.iml" filepath="$PROJECT_DIR$/jdk/jdk.iml" />
-      <module fileurl="file://$PROJECT_DIR$/lambda-hacks.iml" filepath="$PROJECT_DIR$/lambda-hacks.iml" />
+      <module fileurl="file://$PROJECT_DIR$/jdk-test/jdk-test.iml" filepath="$PROJECT_DIR$/jdk-test/jdk-test.iml" />
     </modules>
   </component>
 </project>
