@@ -850,8 +850,8 @@ public interface Map<K,V> {
                       BiFunction<? super K, ? super V, ? extends V> remappingFunction) {
         V oldValue = get(key);
         for (;;) {
+            V newValue = remappingFunction.apply(key, oldValue);
             if (oldValue != null) {
-                V newValue = remappingFunction.apply(key, oldValue);
                 if (newValue != null) {
                     if (replace(key, oldValue, newValue))
                         return newValue;
@@ -862,7 +862,6 @@ public interface Map<K,V> {
                 oldValue = get(key);
             }
             else {
-                V newValue = remappingFunction.apply(key, null);
                 if (newValue != null) {
                     if ((oldValue = putIfAbsent(key, newValue)) == null)
                         return newValue;
