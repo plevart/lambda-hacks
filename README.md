@@ -1,4 +1,4 @@
 lambda-hacks
 ============
 
-Various experiments in JDK8 lambda world
+Various hacks in the JDK8 lambda world
