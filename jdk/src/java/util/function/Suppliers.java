@@ -130,7 +130,7 @@ public final class Suppliers
             this.cacheExceptions = cacheExceptions;
             this.supplier = Objects.requireNonNull(supplier);
 
-            current = new OptimisticBootstrap<>(this);
+            currentUpdater.set(this, new OptimisticBootstrap<>(this));
         }
 
         transient Supplier<T> current;
@@ -176,7 +176,7 @@ public final class Suppliers
                 if (currentUpdater.compareAndSet(outer, this, current))
                     return current.get();
                 else
-                    return outer.current.get();
+                    return (T) currentUpdater.get(outer).get();
             }
         }
 
