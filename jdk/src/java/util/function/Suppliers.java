@@ -1,3 +1,7 @@
+/*
+ * Written by Peter Levart and released to the public domain, as explained at
+ * http://creativecommons.org/publicdomain/zero/1.0/
+ */
 package java.util.function;
 
 import java.io.IOException;
@@ -7,268 +11,208 @@ import java.util.Objects;
 import java.util.concurrent.atomic.AtomicReferenceFieldUpdater;
 
 /**
- * Static utility methods pertaining to {@code Supplier} instances.
- * <p/>
- * <p>All of the returned suppliers are serializable if given serializable
+ * Static utility methods pertaining to {@code Supplier} instances.<p>
+ * All of the returned suppliers are serializable if given serializable
  * parameters.
  */
-public final class Suppliers
-{
-    private Suppliers()
-    {
+public final class Suppliers {
+    private Suppliers() {
         throw new AssertionError("No instances!");
     }
 
     /**
      * Returns a {@code Supplier} that always returns a constant value
+     *
      * @param value the value that is always returned
-     * @param <T> the type of value returned
+     * @param <T>   the type of value returned
      * @return a {@code Supplier} that always returns given value
      */
-    public static <T> Supplier<T> constant(T value)
-    {
+    public static <T> Supplier<T> constant(T value) {
         return new ConstantSupplier<>(value);
     }
 
     /**
      * Returns a {@code Supplier} that always throws unchecked exception
+     *
      * @param rtException a {@code RuntimeException} that is always thrown
-     * @param <T> the type of value never returned
+     * @param <T>         the type of value never returned
      * @return a {@code Supplier} that always throws given runtime exception
+     * @throws NullPointerException if given a null parameter
      */
-    public static <T> Supplier<T> throwing(RuntimeException rtException)
-    {
+    public static <T> Supplier<T> throwing(RuntimeException rtException) throws NullPointerException {
         return new ThrowingSupplier<>(rtException);
     }
 
     /**
      * Returns a {@code Supplier} that always throws unchecked exception
+     *
      * @param error an {@code Error} that is always thrown
-     * @param <T> the type of value never returned
+     * @param <T>   the type of value never returned
      * @return a {@code Supplier} that always throws given error
+     * @throws NullPointerException if given a null parameter
      */
-    public static <T> Supplier<T> throwing(Error error)
-    {
+    public static <T> Supplier<T> throwing(Error error) throws NullPointerException {
         return new ThrowingSupplier<>(error);
     }
 
     /**
      * Returns a {@link Supplier} that evaluates the given {@code supplier} parameter
-     * on call to {@link Supplier#get()} and then caches the resulting value which is returned
-     * in subsequent invocations.
-     * <p/>
+     * on initial call to {@link Supplier#get()} and then caches the resulting value which is returned
+     * in subsequent invocations. Useful for lazy just-in-time initialization of expensive singleton resources
+     * that might not always be needed.<p>
      * Returned {@code Supplier} is serializable if the underlying {@code supplier} is also serializable.
      * Any cached value returned by the underlying {@code supplier} is not part of serialized stream.
-     * When it is de-serialized it is restored into an initial state - i.e.
+     * When such supplier is de-serialized it is restored into an initial state - i.e.
      * the call to {@link Supplier#get()} on just de-serialized supplier will again trigger
-     * underlying {@code supplier} evaluation.
-     * <p/>
+     * underlying {@code supplier} evaluation.<p>
+     * Boolean flags control how and what is being cached:
+     *
+     * @param optimisticEvaluation when {@code true} it means that underlying
+     *                             {@code supplier} will be invoked optimistically, possibly multiple times in face of
+     *                             concurrent initial evaluations of this supplier. A single instance will
+     *                             nevertheless be returned to each concurrent thread and other obtained instances will
+     *                             be released. This is the preferred mode when the given supplier argument is an
+     *                             idempotent (side-effect free) supplier function. When this flag is {@code false}
+     *                             it means that underlying {@code supplier} will be invoked at most once for
+     *                             "cache-able" returns and any threads but one, trying to initially evaluate this
+     *                             supplier concurrently, will block waiting for the one to obtain a "cache-able"
+     *                             result.<p>
+     * @param cacheNulls           when {@code true} it means that {@code null} value returned by underlying supplier
+     *                             is "cache-able". When this flag is {@code false} it means that {@code null} values
+     *                             will not be cached and will  cause re-evaluation of underlying supplier on
+     *                             subsequent call to this supplier.<p>
+     * @param cacheExceptions      when {@code true} it means that an unchecked exception thrown by underlying supplier
+     *                             is "cache-able". When this flag is {@code false} it means that an unchecked
+     *                             exception thrown by underlying supplier will not be cached and will cause
+     *                             re-evaluation of underlying supplier on subsequent call to this supplier.<p>
+     * @param supplier             the underlying {@link Supplier} to evaluate on initial call to this supplier<p>
+     * @throws NullPointerException when given a null {@code supplier} parameter
      */
-    public static <T> Supplier<T> cached(boolean optimisticEvaluation, boolean cacheNulls, boolean cacheExceptions, Supplier<T> supplier)
-    {
-        return optimisticEvaluation
-               ? new OptimisticCachedSupplier<>(cacheNulls, cacheExceptions, Objects.requireNonNull(supplier))
-               : new PessimisticCachedSupplier<>(cacheNulls, cacheExceptions, Objects.requireNonNull(supplier));
+    public static <T> Supplier<T> cached(boolean optimisticEvaluation, boolean cacheNulls, boolean cacheExceptions, Supplier<T> supplier) {
+        return new CachedSupplier<>(optimisticEvaluation, cacheNulls, cacheExceptions, supplier);
     }
 
+    // package-private implementations ...
 
-    static final class ConstantSupplier<T> implements Supplier<T>, Serializable
-    {
+    static final class ConstantSupplier<T> implements Supplier<T>, Serializable {
         private static final long serialVersionUID = 1L;
 
         private final T value;
 
-        ConstantSupplier(T value)
-        {
+        ConstantSupplier(T value) {
             this.value = value;
         }
 
         @Override
-        public T get()
-        {
+        public T get() {
             return value;
         }
     }
 
-    static final class ThrowingSupplier<T> implements Supplier<T>, Serializable
-    {
+    static final class ThrowingSupplier<T> implements Supplier<T>, Serializable {
         private static final long serialVersionUID = 1L;
 
         private final Throwable throwable;
 
-        ThrowingSupplier(Throwable throwable)
-        {
+        ThrowingSupplier(Throwable throwable) throws NullPointerException, IllegalArgumentException {
+            this.throwable = Objects.requireNonNull(throwable);
             if (!(throwable instanceof RuntimeException || throwable instanceof Error))
                 throw new IllegalArgumentException("Not an unchecked exception: " + throwable);
-
-            this.throwable = throwable;
         }
 
         @Override
-        public T get()
-        {
+        public T get() {
             return this.<RuntimeException>doThrow();
         }
 
         @SuppressWarnings("unchecked")
-        private <Unchecked extends Throwable> T doThrow() throws Unchecked
-        {
+        private <Unchecked extends Throwable> T doThrow() throws Unchecked {
             throw (Unchecked) throwable;
         }
     }
 
-    static final class OptimisticCachedSupplier<T> implements Supplier<T>, Serializable
-    {
+    static final class CachedSupplier<T> implements Supplier<T>, Serializable {
         private static final long serialVersionUID = 1L;
 
-        final boolean cacheNulls, cacheExceptions;
+        final boolean optimisticEvaluation, cacheNulls, cacheExceptions;
         final Supplier<T> supplier;
 
-        OptimisticCachedSupplier(boolean cacheNulls, boolean cacheExceptions, Supplier<T> supplier)
-        {
+        CachedSupplier(boolean optimisticEvaluation, boolean cacheNulls, boolean cacheExceptions, Supplier<T> supplier) throws NullPointerException {
+            this.optimisticEvaluation = optimisticEvaluation;
             this.cacheNulls = cacheNulls;
             this.cacheExceptions = cacheExceptions;
             this.supplier = Objects.requireNonNull(supplier);
 
-            currentUpdater.set(this, new OptimisticBootstrap<>(this));
+            currentUpdater.set(this, optimisticEvaluation ? new OptimisticBootstrap() : new PessimisticBootstrap());
         }
 
         transient Supplier<T> current;
 
-        static final AtomicReferenceFieldUpdater<OptimisticCachedSupplier, Supplier> currentUpdater
-            = AtomicReferenceFieldUpdater.newUpdater(OptimisticCachedSupplier.class, Supplier.class, "current");
+        static final AtomicReferenceFieldUpdater<CachedSupplier, Supplier> currentUpdater
+            = AtomicReferenceFieldUpdater.newUpdater(CachedSupplier.class, Supplier.class, "current");
 
         @Override
-        public T get()
-        {
+        public T get() {
             return current.get();
         }
 
-        static final class OptimisticBootstrap<T> implements Supplier<T>
-        {
-            private final OptimisticCachedSupplier<T> outer;
-
-            OptimisticBootstrap(OptimisticCachedSupplier<T> outer)
-            {
-                this.outer = outer;
-            }
-
+        final class OptimisticBootstrap implements Supplier<T> {
             @Override
-            public T get()
-            {
+            public T get() {
                 Supplier<T> current;
-                try
-                {
-                    T value = outer.supplier.get();
-                    if (outer.cacheNulls || value != null)
+                try {
+                    T value = supplier.get();
+                    if (cacheNulls || value != null)
                         current = new ConstantSupplier<>(value);
                     else
                         return null;
                 }
-                catch (RuntimeException | Error throwable)
-                {
-                    if (outer.cacheExceptions)
+                catch (RuntimeException | Error throwable) {
+                    if (cacheExceptions)
                         current = new ThrowingSupplier<>(throwable);
                     else
                         throw throwable;
                 }
 
-                if (currentUpdater.compareAndSet(outer, this, current))
-                    return current.get();
-                else
-                    return (T) currentUpdater.get(outer).get();
+                if (!currentUpdater.compareAndSet(CachedSupplier.this, this, current))
+                    //noinspection unchecked
+                    current = currentUpdater.get(CachedSupplier.this);
+
+                return current.get();
             }
         }
 
-        @SuppressWarnings("unchecked")
-        private void readObject(ObjectInputStream in) throws IOException, ClassNotFoundException
-        {
-            in.defaultReadObject();
-            current = new OptimisticBootstrap<T>(this);
-        }
-    }
-
-    static final class PessimisticCachedSupplier<T> implements Supplier<T>, Serializable
-    {
-        private static final long serialVersionUID = 1L;
-
-        private final Supplier<T> supplier;
-        private final boolean cacheNulls, cacheExceptions;
-
-        PessimisticCachedSupplier(boolean cacheNulls, boolean cacheExceptions, Supplier<T> supplier)
-        {
-            this.supplier = supplier;
-            this.cacheNulls = cacheNulls;
-            this.cacheExceptions = cacheExceptions;
-        }
-
-        private volatile transient Object none;
-        private volatile transient Object value = none = new Object();
-
-        @Override
-        public T get()
-        {
-            @SuppressWarnings("unchecked")
-            T value = (T) this.value;
-            Object none = this.none;
-            return value != none ? value : createValue(none);
-        }
-
-        private T createValue(Object none)
-        {
-            synchronized (none)
-            {
-                // recheck
-                Object value = this.value;
-                if (value == none)
-                {
-                    try
-                    {
-                        value = supplier.get();
-                    }
-                    catch (Throwable t)
-                    {
-                        if (cacheExceptions)
-                        {
-                            value = new ExceptionWrapper(t);
-                        }
+        final class PessimisticBootstrap implements Supplier<T> {
+            @Override
+            public synchronized T get() {
+                // re-check
+                @SuppressWarnings("unchecked")
+                Supplier<T> current = currentUpdater.get(CachedSupplier.this);
+                if (current == this) {
+                    try {
+                        T value = supplier.get();
+                        if (cacheNulls || value != null)
+                            current = new ConstantSupplier<>(value);
                         else
-                        {
-                            throw t;
-                        }
+                            return null;
                     }
-
-                    if (value != null || cacheNulls)
-                        this.value = value;
+                    catch (RuntimeException | Error throwable) {
+                        if (cacheExceptions)
+                            current = new ThrowingSupplier<>(throwable);
+                        else
+                            throw throwable;
+                    }
+                    currentUpdater.set(CachedSupplier.this, current);
                 }
 
-                if (cacheExceptions && value instanceof ExceptionWrapper)
-                    ((ExceptionWrapper) value).<RuntimeException>doThrow();
-
-                return (T) value;
+                return current.get();
             }
         }
 
-        private void readObject(ObjectInputStream in) throws IOException, ClassNotFoundException
-        {
-            in.defaultReadObject();
-            value = none = new Object();
-        }
-    }
-
-    static final class ExceptionWrapper
-    {
-        private final Throwable throwable;
-
-        ExceptionWrapper(Throwable throwable)
-        {
-            this.throwable = throwable;
-        }
-
         @SuppressWarnings("unchecked")
-        <T extends Throwable> void doThrow() throws T
-        {
-            throw (T) throwable;
+        private void readObject(ObjectInputStream in) throws IOException, ClassNotFoundException {
+            in.defaultReadObject();
+            currentUpdater.set(this, optimisticEvaluation ? new OptimisticBootstrap() : new PessimisticBootstrap());
         }
     }
 }
