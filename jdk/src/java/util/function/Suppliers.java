@@ -4,11 +4,13 @@
  */
 package java.util.function;
 
+import sun.misc.Unsafe;
+
 import java.io.IOException;
 import java.io.ObjectInputStream;
 import java.io.Serializable;
 import java.util.Objects;
-import java.util.concurrent.atomic.AtomicReferenceFieldUpdater;
+import java.util.concurrent.LongAdder;
 
 /**
  * Static utility methods pertaining to {@code Supplier} instances.<p>
@@ -131,8 +133,14 @@ public final class Suppliers {
         }
     }
 
+    public static long races(Supplier<?> supplier) {
+        return supplier instanceof CachedSupplier ? ((CachedSupplier) supplier).OPTIMISTIC_CACHED_RACES.sum() : 0L;
+    }
+
     static final class CachedSupplier<T> implements Supplier<T>, Serializable {
         private static final long serialVersionUID = 1L;
+
+        final LongAdder OPTIMISTIC_CACHED_RACES = new LongAdder();
 
         final boolean optimisticEvaluation, cacheNulls, cacheExceptions;
         final Supplier<T> supplier;
@@ -143,13 +151,37 @@ public final class Suppliers {
             this.cacheExceptions = cacheExceptions;
             this.supplier = Objects.requireNonNull(supplier);
 
-            currentUpdater.set(this, optimisticEvaluation ? new OptimisticBootstrap() : new PessimisticBootstrap());
+            Current.set(this, optimisticEvaluation ? new OptimisticBootstrap() : new PessimisticBootstrap());
         }
 
         transient Supplier<T> current;
 
-        static final AtomicReferenceFieldUpdater<CachedSupplier, Supplier> currentUpdater
-            = AtomicReferenceFieldUpdater.newUpdater(CachedSupplier.class, Supplier.class, "current");
+        static class Current {
+            private static final Unsafe unsafe = Unsafe.getUnsafe();
+            private static final long currentOffset;
+
+            static {
+                try {
+                    currentOffset = unsafe.objectFieldOffset(CachedSupplier.class.getDeclaredField("current"));
+                }
+                catch (NoSuchFieldException e) {
+                    throw new Error("No 'current' field found", e);
+                }
+            }
+
+            @SuppressWarnings("unchecked")
+            static <T> Supplier<T> get(CachedSupplier<T> cs) {
+                return (Supplier<T>) unsafe.getObjectVolatile(cs, currentOffset);
+            }
+
+            static <T> void set(CachedSupplier<T> cs, Supplier<T> supplier) {
+                unsafe.putObjectVolatile(cs, currentOffset, supplier);
+            }
+
+            static <T> boolean cas(CachedSupplier<T> cs, Supplier<T> oldSupplier, Supplier<T> newSupplier) {
+                return unsafe.compareAndSwapObject(cs, currentOffset, oldSupplier, newSupplier);
+            }
+        }
 
         @Override
         public T get() {
@@ -174,9 +206,12 @@ public final class Suppliers {
                         throw throwable;
                 }
 
-                if (!currentUpdater.compareAndSet(CachedSupplier.this, this, current))
+                if (!Current.cas(CachedSupplier.this, this, current))
+                {
                     //noinspection unchecked
-                    current = currentUpdater.get(CachedSupplier.this);
+                    current = Current.get(CachedSupplier.this);
+                    OPTIMISTIC_CACHED_RACES.increment();
+                }
 
                 return current.get();
             }
@@ -187,7 +222,7 @@ public final class Suppliers {
             public synchronized T get() {
                 // re-check
                 @SuppressWarnings("unchecked")
-                Supplier<T> current = currentUpdater.get(CachedSupplier.this);
+                Supplier<T> current = Current.get(CachedSupplier.this);
                 if (current == this) {
                     try {
                         T value = supplier.get();
@@ -202,7 +237,7 @@ public final class Suppliers {
                         else
                             throw throwable;
                     }
-                    currentUpdater.set(CachedSupplier.this, current);
+                    Current.set(CachedSupplier.this, current);
                 }
 
                 return current.get();
@@ -212,7 +247,7 @@ public final class Suppliers {
         @SuppressWarnings("unchecked")
         private void readObject(ObjectInputStream in) throws IOException, ClassNotFoundException {
             in.defaultReadObject();
-            currentUpdater.set(this, optimisticEvaluation ? new OptimisticBootstrap() : new PessimisticBootstrap());
+            Current.set(this, optimisticEvaluation ? new OptimisticBootstrap() : new PessimisticBootstrap());
         }
     }
 }
