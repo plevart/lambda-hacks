@@ -98,7 +98,7 @@ public class LongAdder extends Striped64 implements Serializable {
                 as == null || (m = as.length - 1) < 0 ||
                 (a = as[m & hc.code]) == null ||
                 !(uncontended = a.cas(v = a.value, v + x)))
-                longAccumulate(x, hc, null, uncontended);
+                longAccumulate(x, hc, 0L, null, uncontended);
         }
     }
 
