@@ -6,8 +6,6 @@ package java.util.function;
 
 import sun.misc.Unsafe;
 
-import java.io.IOException;
-import java.io.ObjectInputStream;
 import java.io.Serializable;
 import java.util.Objects;
 
@@ -143,11 +141,9 @@ public final class Suppliers {
             this.cacheNulls = cacheNulls;
             this.cacheExceptions = cacheExceptions;
             this.supplier = Objects.requireNonNull(supplier);
-
-            Current.set(this, optimisticEvaluation ? new OptimisticBootstrap() : new PessimisticBootstrap());
         }
 
-        transient Supplier<T> current;
+        private transient Supplier<T> current;
 
         static class Current {
             private static final Unsafe unsafe = Unsafe.getUnsafe();
@@ -178,13 +174,41 @@ public final class Suppliers {
 
         @Override
         public T get() {
+            Supplier<T> current = this.current;
+            if (current != null)
+                return current.get();
+            else if (optimisticEvaluation)
+                return optimisticGet();
+            else
+                return pessimisticGet();
+        }
+
+        private T optimisticGet() {
+            Supplier<T> current;
+            try {
+                T value = supplier.get();
+                if (cacheNulls || value != null)
+                    current = new ConstantSupplier<>(value);
+                else
+                    return null;
+            }
+            catch (RuntimeException | Error throwable) {
+                if (cacheExceptions)
+                    current = new ThrowingSupplier<>(throwable);
+                else
+                    throw throwable;
+            }
+
+            if (!Current.cas(CachedSupplier.this, null, current))
+                current = Current.get(CachedSupplier.this);
+
             return current.get();
         }
 
-        final class OptimisticBootstrap implements Supplier<T> {
-            @Override
-            public T get() {
-                Supplier<T> current;
+        private synchronized T pessimisticGet() {
+            // re-check
+            Supplier<T> current = Current.get(CachedSupplier.this);
+            if (current == null) {
                 try {
                     T value = supplier.get();
                     if (cacheNulls || value != null)
@@ -198,43 +222,10 @@ public final class Suppliers {
                     else
                         throw throwable;
                 }
-
-                if (!Current.cas(CachedSupplier.this, this, current))
-                    current = Current.get(CachedSupplier.this);
-
-                return current.get();
+                Current.set(CachedSupplier.this, current);
             }
-        }
 
-        final class PessimisticBootstrap implements Supplier<T> {
-            @Override
-            public synchronized T get() {
-                // re-check
-                Supplier<T> current = Current.get(CachedSupplier.this);
-                if (current == this) {
-                    try {
-                        T value = supplier.get();
-                        if (cacheNulls || value != null)
-                            current = new ConstantSupplier<>(value);
-                        else
-                            return null;
-                    }
-                    catch (RuntimeException | Error throwable) {
-                        if (cacheExceptions)
-                            current = new ThrowingSupplier<>(throwable);
-                        else
-                            throw throwable;
-                    }
-                    Current.set(CachedSupplier.this, current);
-                }
-
-                return current.get();
-            }
-        }
-
-        private void readObject(ObjectInputStream in) throws IOException, ClassNotFoundException {
-            in.defaultReadObject();
-            Current.set(this, optimisticEvaluation ? new OptimisticBootstrap() : new PessimisticBootstrap());
+            return current.get();
         }
     }
 }

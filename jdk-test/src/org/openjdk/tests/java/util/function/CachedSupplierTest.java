@@ -1,5 +1,6 @@
 package org.openjdk.tests.java.util.function;
 
+import java.util.Random;
 import java.util.function.Supplier;
 import java.util.function.Suppliers;
 
@@ -16,48 +17,71 @@ public class CachedSupplierTest {
             this.loops = loops;
         }
 
+        Throwable throwable;
+        int sum;
+        long t;
+
         @Override
         public void run() {
-            for (int i = 0; i < loops; i++)
-            {
-                supplier.get();
+            try {
+                long t0 = System.nanoTime();
+                for (int i = 0; i < loops; i++) {
+                    sum += supplier.get().length();
+                }
+                t = System.nanoTime() - t0;
+            }
+            catch (Throwable e) {
+                this.throwable = e;
             }
         }
     }
 
-    static Object[] test(int threads, int loops) {
-        Supplier<String> supplier = Suppliers.cached(true, true, true, () -> "x");
+    static long[] test(int threads, int loops, Supplier<String> supplier) throws Throwable {
+//        supplier = Suppliers.cached(false, true, true, () -> new String("x"));
+
         Worker[] workers = new Worker[threads];
         for (int i = 0; i < threads; i++)
             workers[i] = new Worker(supplier, loops);
-        long t0 = System.nanoTime();
-        for (Worker worker : workers) worker.start();
+        for (Worker worker : workers) {
+            worker.start();
+            worker.join();
+        }
         try {
-            for (Worker worker : workers) {
+            long[] times = new long[workers.length];
+            for (int i = 0; i < workers.length; i++) {
+                Worker worker = workers[i];
                 worker.join();
+                if (worker.throwable != null)
+                    throw worker.throwable;
+                if (worker.sum != loops)
+                    throw new IllegalStateException("sum " + worker.sum + " != loops " + loops);
+                times[i] = worker.t;
             }
-
+            return times;
         }
         catch (InterruptedException e) {
             throw new RuntimeException(e);
         }
-        return new Object[]{System.nanoTime() - t0};
     }
 
-    static void testX(int threads, int loops) {
-        System.out.printf("%4d threads x %,12d loops :", threads, loops);
-        for (int i = 0; i < 5; i++)
-            System.out.printf(" %,15d ns", test(threads, loops));
-        System.out.println();
+    static void testX(int threads, int loops, Supplier<String> supplier) throws Throwable {
+//        supplier = Suppliers.cached(false, true, true, () -> new String("x"));
+
+        System.out.printf("\n%4d threads x %,12d loops\n", threads, loops);
+        for (int i = 0; i < 5; i++) {
+            for (long t : test(threads, loops, supplier))
+                System.out.printf(" %,15d ns", t);
+            System.out.println();
+        }
     }
 
-    public static void main(String[] args) {
-        testX(1, 100_000_000);
-        testX(2, 100_000_000);
-        testX(4, 100_000_000);
-        testX(8, 100_000_000);
-        testX(16, 100_000_000);
-        testX(32, 100_000_000);
-        testX(64, 100_000_000);
+    public static void main(String[] args) throws Throwable {
+        Supplier<String> supplier = Suppliers.cached(false, true, true, () -> new String("x"));
+        Random rnd = new Random();
+        testX(1, rnd.nextInt(1000_000_000) + 1000_000_000, supplier);
+        testX(2, rnd.nextInt(1000_000_000) + 1000_000_000, supplier);
+        testX(4, rnd.nextInt(1000_000_000) + 1000_000_000, supplier);
+        testX(6, rnd.nextInt(1000_000_000) + 1000_000_000, supplier);
+        testX(8, rnd.nextInt(1000_000_000) + 1000_000_000, supplier);
     }
 }
