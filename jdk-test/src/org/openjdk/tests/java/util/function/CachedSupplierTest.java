@@ -6,19 +6,6 @@ import java.util.function.Suppliers;
 /**
  */
 public class CachedSupplierTest {
-    static class Int { int value; }
-
-    public static final ThreadLocal<Int> TL_COUNTER = new ThreadLocal<Int>()
-    {
-        @Override
-        protected Int initialValue() {
-            return new Int();
-        }
-
-        public final Int getFast() {
-            return super.get();
-        }
-    };
 
     static class Worker extends Thread {
         private final Supplier<String> supplier;
@@ -33,7 +20,7 @@ public class CachedSupplierTest {
         public void run() {
             for (int i = 0; i < loops; i++)
             {
-                TL_COUNTER.get().value++;
+                supplier.get();
             }
         }
     }
@@ -54,13 +41,13 @@ public class CachedSupplierTest {
         catch (InterruptedException e) {
             throw new RuntimeException(e);
         }
-        return new Object[]{System.nanoTime() - t0, Suppliers.races(supplier)};
+        return new Object[]{System.nanoTime() - t0};
     }
 
     static void testX(int threads, int loops) {
         System.out.printf("%4d threads x %,12d loops :", threads, loops);
         for (int i = 0; i < 5; i++)
-            System.out.printf(" %,15d ns (%4d races)", test(threads, loops));
+            System.out.printf(" %,15d ns", test(threads, loops));
         System.out.println();
     }
 

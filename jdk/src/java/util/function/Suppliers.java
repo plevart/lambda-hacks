@@ -10,7 +10,6 @@ import java.io.IOException;
 import java.io.ObjectInputStream;
 import java.io.Serializable;
 import java.util.Objects;
-import java.util.concurrent.LongAdder;
 
 /**
  * Static utility methods pertaining to {@code Supplier} instances.<p>
@@ -133,14 +132,8 @@ public final class Suppliers {
         }
     }
 
-    public static long races(Supplier<?> supplier) {
-        return supplier instanceof CachedSupplier ? ((CachedSupplier) supplier).OPTIMISTIC_CACHED_RACES.sum() : 0L;
-    }
-
     static final class CachedSupplier<T> implements Supplier<T>, Serializable {
         private static final long serialVersionUID = 1L;
-
-        final LongAdder OPTIMISTIC_CACHED_RACES = new LongAdder();
 
         final boolean optimisticEvaluation, cacheNulls, cacheExceptions;
         final Supplier<T> supplier;
@@ -207,11 +200,7 @@ public final class Suppliers {
                 }
 
                 if (!Current.cas(CachedSupplier.this, this, current))
-                {
-                    //noinspection unchecked
                     current = Current.get(CachedSupplier.this);
-                    OPTIMISTIC_CACHED_RACES.increment();
-                }
 
                 return current.get();
             }
@@ -221,7 +210,6 @@ public final class Suppliers {
             @Override
             public synchronized T get() {
                 // re-check
-                @SuppressWarnings("unchecked")
                 Supplier<T> current = Current.get(CachedSupplier.this);
                 if (current == this) {
                     try {
@@ -244,7 +232,6 @@ public final class Suppliers {
             }
         }
 
-        @SuppressWarnings("unchecked")
         private void readObject(ObjectInputStream in) throws IOException, ClassNotFoundException {
             in.defaultReadObject();
             Current.set(this, optimisticEvaluation ? new OptimisticBootstrap() : new PessimisticBootstrap());
