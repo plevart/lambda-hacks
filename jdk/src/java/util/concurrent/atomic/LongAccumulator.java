@@ -86,9 +86,8 @@ public class LongAccumulator extends Striped64 implements Serializable {
      * Updates with the given value.
      *
      * @param x the value
-     * @return the returned value of the accumulator function that was used to update the state of this accumulator
      */
-    public long accumulate(long x) {
+    public void accumulate(long x) {
         Cell[] as; long b, v, r; CellHashCode hc; Cell a; int m;
         if ((as = cells) != null ||
             (r = function.applyAsLong(b = base, x)) != b && !casBase(b, r)) { // ## rename when JDK8 syncs with lambda, applyAsLong
@@ -99,9 +98,8 @@ public class LongAccumulator extends Striped64 implements Serializable {
                 !(uncontended =
                   (r = function.applyAsLong(v = a.value, x)) == v || // ## rename when JDK8 syncs with lambda, applyAsLong
                   a.cas(v, r)))
-                r = longAccumulate(x, hc, identity, function, uncontended);
+                longAccumulate(x, hc, function, uncontended);
         }
-        return r;
     }
 
     /**

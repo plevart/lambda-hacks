@@ -213,15 +213,13 @@ abstract class Striped64 extends Number {
      *
      * @param x the value
      * @param hc the hash code holder
-     * @param identity the identity value used when {@code fn} is non-null
      * @param fn the update function, or null for add (this convention
      * avoids the need for an extra field or function in LongAdder).
      * @param wasUncontended false if CAS failed before call
      */
-    final long longAccumulate(long x, CellHashCode hc,
-                              long identity, LongBinaryOperator fn,
+    final void longAccumulate(long x, CellHashCode hc,
+                              LongBinaryOperator fn,
                               boolean wasUncontended) {
-        long res;
         int h;
         if (hc == null) {
             hc = new CellHashCode();
@@ -237,8 +235,7 @@ abstract class Striped64 extends Number {
             if ((as = cells) != null && (n = as.length) > 0) {
                 if ((a = as[(n - 1) & h]) == null) {
                     if (cellsBusy == 0) {       // Try to attach new Cell
-                        Cell r = new Cell(res = ((fn == null) ? x :
-                                                 fn.applyAsLong(identity, x)));   // Optimistically create
+                        Cell r = new Cell(x);   // Optimistically create
                         if (cellsBusy == 0 && casCellsBusy()) {
                             boolean created = false;
                             try {               // Recheck under lock
@@ -261,7 +258,7 @@ abstract class Striped64 extends Number {
                 }
                 else if (!wasUncontended)       // CAS already known to fail
                     wasUncontended = true;      // Continue after rehash
-                else if (a.cas(v = a.value, res = ((fn == null) ? v + x :
+                else if (a.cas(v = a.value, ((fn == null) ? v + x :
                                              fn.applyAsLong(v, x))))   // ## rename when JDK8 syncs with lambda, applyAsLong
                     break;
                 else if (n >= NCPU || cells != as)
@@ -287,24 +284,25 @@ abstract class Striped64 extends Number {
                 h ^= h << 5;
             }
             else if (cellsBusy == 0 && cells == as && casCellsBusy()) {
+                boolean init = false;
                 try {                           // Initialize table
                     if (cells == as) {
                         Cell[] rs = new Cell[2];
-                        rs[h & 1] = new Cell(res = ((fn == null) ? x :
-                                                    fn.applyAsLong(identity, x)));
+                        rs[h & 1] = new Cell(x);
                         cells = rs;
-                        break;
+                        init = true;
                     }
                 } finally {
                     cellsBusy = 0;
                 }
+                if (init)
+                    break;
             }
-            else if (casBase(v = base, res = ((fn == null) ? v + x :
+            else if (casBase(v = base, ((fn == null) ? v + x :
                                         fn.applyAsLong(v, x))))     // ## rename when JDK8 syncs with lambda, applyAsLong
                 break;                          // Fall back on using base
         }
         hc.code = h;                            // Record index for next time
-        return res;
     }
 
     /**
