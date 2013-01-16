@@ -1,0 +1,67 @@
+JDK7 TLR:
+
+  1 threads,  100,000,000 ops
+
+TLR.current().nextInt() | 4.29 +- 0.00 ns/op | 4.23 +- 0.00 ns/op | 4.36 +- 0.00 ns/op | 4.48 +- 0.00 ns/op | 3.78 +- 0.00 ns/op
+          tlr.nextInt() | 1.45 +- 0.00 ns/op | 1.42 +- 0.00 ns/op | 1.41 +- 0.00 ns/op | 1.40 +- 0.00 ns/op | 1.40 +- 0.00 ns/op
+
+  2 threads,  100,000,000 ops
+
+TLR.current().nextInt() | 4.17 +- 0.01 ns/op | 3.79 +- 0.00 ns/op | 4.15 +- 0.36 ns/op | 3.92 +- 0.13 ns/op | 4.44 +- 0.15 ns/op
+          tlr.nextInt() | 1.40 +- 0.00 ns/op | 1.41 +- 0.00 ns/op | 1.40 +- 0.00 ns/op | 1.40 +- 0.00 ns/op | 1.40 +- 0.00 ns/op
+
+  4 threads,  100,000,000 ops
+
+TLR.current().nextInt() | 4.72 +- 0.57 ns/op | 4.25 +- 0.26 ns/op | 4.13 +- 0.39 ns/op | 4.28 +- 0.56 ns/op | 4.58 +- 0.21 ns/op
+          tlr.nextInt() | 1.41 +- 0.00 ns/op | 1.42 +- 0.01 ns/op | 1.41 +- 0.00 ns/op | 1.40 +- 0.00 ns/op | 1.41 +- 0.01 ns/op
+
+  6 threads,  100,000,000 ops
+
+TLR.current().nextInt() | 5.42 +- 0.54 ns/op | 6.83 +- 2.35 ns/op | 4.94 +- 0.80 ns/op | 5.28 +- 0.65 ns/op | 5.25 +- 0.70 ns/op
+          tlr.nextInt() | 1.54 +- 0.10 ns/op | 1.90 +- 0.67 ns/op | 1.54 +- 0.09 ns/op | 1.54 +- 0.09 ns/op | 1.53 +- 0.09 ns/op
+
+
+JDK8 TLR as proposed:
+
+  1 threads,  100,000,000 ops
+
+TLR.current().nextInt() | 2.51 +- 0.00 ns/op | 2.51 +- 0.00 ns/op | 2.51 +- 0.00 ns/op | 2.51 +- 0.00 ns/op | 2.52 +- 0.00 ns/op
+          tlr.nextInt() | 1.65 +- 0.00 ns/op | 1.65 +- 0.00 ns/op | 1.65 +- 0.00 ns/op | 1.65 +- 0.00 ns/op | 1.65 +- 0.00 ns/op
+
+  2 threads,  100,000,000 ops
+
+TLR.current().nextInt() | 2.51 +- 0.00 ns/op | 2.51 +- 0.00 ns/op | 2.51 +- 0.00 ns/op | 2.51 +- 0.00 ns/op | 2.51 +- 0.00 ns/op
+          tlr.nextInt() | 1.65 +- 0.00 ns/op | 1.65 +- 0.00 ns/op | 1.65 +- 0.00 ns/op | 1.65 +- 0.00 ns/op | 1.65 +- 0.00 ns/op
+
+  4 threads,  100,000,000 ops
+
+TLR.current().nextInt() | 2.51 +- 0.00 ns/op | 2.52 +- 0.01 ns/op | 2.51 +- 0.00 ns/op | 2.52 +- 0.01 ns/op | 2.52 +- 0.01 ns/op
+          tlr.nextInt() | 1.66 +- 0.01 ns/op | 1.66 +- 0.01 ns/op | 1.65 +- 0.00 ns/op | 1.65 +- 0.00 ns/op | 1.70 +- 0.00 ns/op
+
+  6 threads,  100,000,000 ops
+
+TLR.current().nextInt() | 2.70 +- 0.14 ns/op | 2.70 +- 0.13 ns/op | 2.72 +- 0.11 ns/op | 2.71 +- 0.12 ns/op | 2.71 +- 0.14 ns/op
+          tlr.nextInt() | 1.78 +- 0.08 ns/op | 1.78 +- 0.08 ns/op | 1.78 +- 0.08 ns/op | 1.78 +- 0.08 ns/op | 1.78 +- 0.09 ns/op
+
+
+JDK8 TLR modified to have a reference to TLR in Thread:
+
+  1 threads,  100,000,000 ops
+
+TLR.current().nextInt() | 2.50 +- 0.00 ns/op | 2.50 +- 0.00 ns/op | 2.50 +- 0.00 ns/op | 2.50 +- 0.00 ns/op | 2.50 +- 0.00 ns/op
+          tlr.nextInt() | 1.40 +- 0.00 ns/op | 1.40 +- 0.00 ns/op | 1.41 +- 0.00 ns/op | 1.40 +- 0.00 ns/op | 1.40 +- 0.00 ns/op
+
+  2 threads,  100,000,000 ops
+
+TLR.current().nextInt() | 2.50 +- 0.00 ns/op | 2.51 +- 0.01 ns/op | 2.51 +- 0.01 ns/op | 2.53 +- 0.03 ns/op | 2.51 +- 0.01 ns/op
+          tlr.nextInt() | 1.41 +- 0.00 ns/op | 1.40 +- 0.00 ns/op | 1.40 +- 0.00 ns/op | 1.40 +- 0.00 ns/op | 1.40 +- 0.00 ns/op
+
+  4 threads,  100,000,000 ops
+
+TLR.current().nextInt() | 2.52 +- 0.01 ns/op | 2.51 +- 0.00 ns/op | 2.51 +- 0.01 ns/op | 2.51 +- 0.01 ns/op | 2.52 +- 0.01 ns/op
+          tlr.nextInt() | 1.41 +- 0.01 ns/op | 1.41 +- 0.01 ns/op | 1.41 +- 0.01 ns/op | 1.40 +- 0.00 ns/op | 1.41 +- 0.00 ns/op
+
+  6 threads,  100,000,000 ops
+
+TLR.current().nextInt() | 2.95 +- 0.32 ns/op | 3.77 +- 1.78 ns/op | 2.97 +- 0.30 ns/op | 3.05 +- 0.35 ns/op | 2.99 +- 0.29 ns/op
+          tlr.nextInt() | 1.54 +- 0.09 ns/op | 1.54 +- 0.09 ns/op | 1.54 +- 0.08 ns/op | 1.53 +- 0.09 ns/op | 1.55 +- 0.09 ns/op

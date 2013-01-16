@@ -1,38 +1,19 @@
 package org.openjdk.tests.java.util.concurrent.atomic;
 
 import java.util.Random;
-import java.util.concurrent.MultiThreadedRandom;
 import java.util.concurrent.ThreadLocalRandom;
-import java.util.concurrent.atomic.LongAdder;
+import java.util.function.Function;
 
 /**
  */
 public class RandomTest
 {
-    static class RandomWorker extends Thread
+    static abstract class Worker extends Thread
     {
-        private final Random rnd;
-        private final int loops;
+        final int loops;
+        long time;
 
-        RandomWorker(Random rnd, int loops)
-        {
-            this.rnd = rnd;
-            this.loops = loops;
-        }
-
-        @Override
-        public void run()
-        {
-            for (int i = 0; i < loops; i++)
-                rnd.nextInt();
-        }
-    }
-
-    static class TLRandomWorker extends Thread
-    {
-        private final int loops;
-
-        TLRandomWorker(int loops)
+        Worker(int loops)
         {
             this.loops = loops;
         }
@@ -40,48 +21,108 @@ public class RandomTest
         @Override
         public void run()
         {
+            long t0 = System.nanoTime();
+            doWork();
+            time = System.nanoTime() - t0;
+        }
+
+        protected abstract void doWork();
+    }
+
+    static class TLRCurrentNextIntWorker extends Worker
+    {
+        TLRCurrentNextIntWorker(int loops)
+        {
+            super(loops);    //To change body of overridden methods use File | Settings | File Templates.
+        }
+
+        int sum;
+
+        @Override
+        protected void doWork()
+        {
+            int sum = 0;
             for (int i = 0; i < loops; i++)
-                ThreadLocalRandom.current().nextInt();
+                sum += ThreadLocalRandom.current().nextInt();
+            this.sum = sum;
         }
     }
 
-    static Object[] test(int threads, int loops, Random rnd)
+    static class TLRNextIntWorker extends Worker
     {
-        Thread[] workers = new Thread[threads];
+        TLRNextIntWorker(int loops)
+        {
+            super(loops);
+        }
+
+        int sum;
+
+        @Override
+        protected void doWork()
+        {
+            Random rnd = ThreadLocalRandom.current();
+            int sum = 0;
+            for (int i = 0; i < loops; i++)
+                sum += rnd.nextInt();
+            this.sum = sum;
+        }
+    }
+
+    static Object[] test(Function<Integer, Worker> workerFactory, int threads, int loops)
+    {
+        Worker[] workers = new Worker[threads];
         for (int i = 0; i < threads; i++)
-            workers[i] = rnd == null ? new TLRandomWorker(loops) : new RandomWorker(rnd, loops);
-        long t0 = System.nanoTime();
-        for (Thread worker : workers) worker.start();
+            workers[i] = workerFactory.apply(loops);
+        for (Worker worker : workers) worker.start();
+        long tSum = 0L;
         try
         {
-            for (Thread worker : workers) worker.join();
+            for (Worker worker : workers)  {
+                worker.join();
+                tSum += worker.time;
+            }
         }
         catch (InterruptedException e)
         {
             throw new RuntimeException(e);
         }
-        return new Object[] { System.nanoTime() - t0 };
+
+        double tAvg = (double) tSum / threads;
+        double vSum = 0L;
+        for (Worker worker : workers) {
+            vSum += ((double) worker.time - tAvg) * ((double) worker.time - tAvg);
+        }
+        double v = vSum / threads;
+        double σ = Math.sqrt(v);
+        return new Object[]{tAvg / loops, σ / loops};
     }
 
-    static void testX(int threads, int loops, Random rnd)
+    static void testX(int threads, int loops)
     {
-        System.out.printf("%20s ", rnd == null ? "ThreadLocalRandom" : rnd.getClass().getSimpleName());
-        System.out.printf("%4d threads x %9d loops :", threads, loops);
-        for (int i = 0; i < 7; i++)
-            System.out.printf(" %,15d ns", test(threads, loops, rnd));
+        System.out.printf("\n%3d threads, %,12d ops\n\n", threads, loops);
+
+        // warm-up
+        for (int i = 0; i < 5; i++)
+            test(TLRCurrentNextIntWorker::new, threads, loops);
+        for (int i = 0; i < 5; i++)
+            test(TLRNextIntWorker::new, threads, loops);
+
+        System.out.printf("TLR.current().nextInt()");
+        for (int i = 0; i < 5; i++)
+            System.out.printf(" | %,4.2f +- %,4.2f ns/op", test(TLRCurrentNextIntWorker::new, threads, loops));
+        System.out.println();
+
+        System.out.printf("          tlr.nextInt()");
+        for (int i = 0; i < 5; i++)
+            System.out.printf(" | %,4.2f +- %,4.2f ns/op", test(TLRNextIntWorker::new, threads, loops));
         System.out.println();
     }
 
     public static void main(String[] args)
     {
-        Random rnd = new MultiThreadedRandom();
-        testX(1, 100_000_000, null);
-        testX(1, 100_000_000, rnd);
-        testX(2, 100_000_000, null);
-        testX(2, 100_000_000, rnd);
-        testX(4, 100_000_000, null);
-        testX(4, 100_000_000, rnd);
-        testX(6, 100_000_000, null);
-        testX(6, 100_000_000, rnd);
+        testX(1, 100_000_000);
+        testX(2, 100_000_000);
+        testX(4, 100_000_000);
+        testX(6, 100_000_000);
     }
 }
