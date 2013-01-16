@@ -133,17 +133,20 @@ public class ThreadLocalRandom extends Random {
         new ThreadLocal<Double>();
 
     /*
-     * Field used only during singleton initialization
+     * Used to check the invoking thread and also serves as an indicator of initialized state
      */
-    boolean initialized; // true when constructor completes
+    final transient Thread localThread;
 
-    /** Constructor used only for static singleton */
-    private ThreadLocalRandom() {
-        initialized = true; // false during super() call
+    /*
+     * Current rnd value (seed)
+     */
+    long rnd;
+
+    /** private Constructor */
+    private ThreadLocalRandom(Thread localThread, long seed) {
+        super(seed);
+        this.localThread = localThread;
     }
-
-    /** The common ThreadLocalRandom */
-    static final ThreadLocalRandom instance = new ThreadLocalRandom();
 
     /**
      * Initialize Thread fields for the current thread.  Called only
@@ -162,7 +165,8 @@ public class ThreadLocalRandom extends Random {
         } while (!seedGenerator.compareAndSet(current, next));
         long r = next ^ ((long)probe << 32) ^ System.nanoTime();
         Thread t = Thread.currentThread();
-        UNSAFE.putLong(t, SEED, r);
+        ThreadLocalRandom tlr = new ThreadLocalRandom(t, r);
+        UNSAFE.putObject(t, CURRENT, tlr);
         UNSAFE.putInt(t, PROBE, probe);
     }
 
@@ -172,9 +176,13 @@ public class ThreadLocalRandom extends Random {
      * @return the current thread's {@code ThreadLocalRandom}
      */
     public static ThreadLocalRandom current() {
-        if (UNSAFE.getInt(Thread.currentThread(), PROBE) == 0)
-            localInit();
-        return instance;
+        Thread t = Thread.currentThread();
+        ThreadLocalRandom tlr = (ThreadLocalRandom) UNSAFE.getObject(t, CURRENT);
+        if (tlr != null)
+            return tlr;
+
+        localInit();
+        return (ThreadLocalRandom) UNSAFE.getObject(t, CURRENT);
     }
 
     /**
@@ -184,15 +192,16 @@ public class ThreadLocalRandom extends Random {
      * @throws UnsupportedOperationException always
      */
     public void setSeed(long seed) {
-        if (initialized) // allow call from super() constructor
+        if (localThread != null) // allow call from super() constructor
             throw new UnsupportedOperationException();
+        rnd = seed;
     }
 
     protected int next(int bits) {
-        Thread t; long r; // read and update per-thread seed
-        UNSAFE.putLong
-            (t = Thread.currentThread(), SEED,
-             r = (UNSAFE.getLong(t, SEED) * multiplier + addend) & mask);
+        if (Thread.currentThread() != localThread)
+            throw new IllegalStateException("Not called from local thread");
+        long r = (rnd * multiplier + addend) & mask;
+        rnd = r;
         return (int) (r >>> (48-bits));
     }
 
@@ -357,7 +366,7 @@ public class ThreadLocalRandom extends Random {
             r ^= r >>> 17;
             r ^= r << 5;
         }
-        else if ((r = (int)UNSAFE.getLong(t, SEED)) == 0)
+        else if ((r = (int)UNSAFE.getLong(t, CURRENT)) == 0)
             r = 1; // avoid zero
         UNSAFE.putInt(t, SECONDARY, r);
         return r;
@@ -398,7 +407,7 @@ public class ThreadLocalRandom extends Random {
         throws java.io.IOException {
 
         java.io.ObjectOutputStream.PutField fields = out.putFields();
-        fields.put("rnd", 0L);
+        fields.put("rnd", rnd);
         fields.put("initialized", true);
         fields.put("pad0", 0L);
         fields.put("pad1", 0L);
@@ -420,15 +429,15 @@ public class ThreadLocalRandom extends Random {
 
     // Unsafe mechanics
     private static final sun.misc.Unsafe UNSAFE;
-    private static final long SEED;
+    private static final long CURRENT;
     private static final long PROBE;
     private static final long SECONDARY;
     static {
         try {
             UNSAFE = sun.misc.Unsafe.getUnsafe();
             Class<?> tk = Thread.class;
-            SEED = UNSAFE.objectFieldOffset
-                (tk.getDeclaredField("threadLocalRandomSeed"));
+            CURRENT = UNSAFE.objectFieldOffset
+                (tk.getDeclaredField("threadLocalRandom"));
             PROBE = UNSAFE.objectFieldOffset
                 (tk.getDeclaredField("threadLocalRandomProbe"));
             SECONDARY = UNSAFE.objectFieldOffset
