@@ -8,63 +8,98 @@ import java.util.function.Function;
  */
 public class RandomTest
 {
-
-    static class TLRCurrentNextIntWorker extends Thread
+    static abstract class Worker extends Thread
     {
-        private final int loops;
+        final int loops;
+        long time;
 
+        Worker(int loops)
+        {
+            this.loops = loops;
+        }
+
+        @Override
+        public void run()
+        {
+            long t0 = System.nanoTime();
+            doWork();
+            time = System.nanoTime() - t0;
+        }
+
+        protected abstract void doWork();
+    }
+
+    static class TLRCurrentNextIntWorker extends Worker
+    {
         TLRCurrentNextIntWorker(int loops)
         {
-            this.loops = loops;
+            super(loops);    //To change body of overridden methods use File | Settings | File Templates.
         }
 
+        int sum;
+
         @Override
-        public void run()
+        protected void doWork()
         {
+            int sum = 0;
             for (int i = 0; i < loops; i++)
-                ThreadLocalRandom.current().nextInt();
+                sum += ThreadLocalRandom.current().nextInt();
+            this.sum = sum;
         }
     }
 
-    static class TLRNextIntWorker extends Thread
+    static class TLRNextIntWorker extends Worker
     {
-        private final int loops;
-
         TLRNextIntWorker(int loops)
         {
-            this.loops = loops;
+            super(loops);
         }
 
+        int sum;
+
         @Override
-        public void run()
+        protected void doWork()
         {
             Random rnd = ThreadLocalRandom.current();
+            int sum = 0;
             for (int i = 0; i < loops; i++)
-                rnd.nextInt();
+                sum += rnd.nextInt();
+            this.sum = sum;
         }
     }
 
-    static Object[] test(Function<Integer, Thread> workerFactory, int threads, int loops)
+    static Object[] test(Function<Integer, Worker> workerFactory, int threads, int loops)
     {
-        Thread[] workers = new Thread[threads];
+        Worker[] workers = new Worker[threads];
         for (int i = 0; i < threads; i++)
             workers[i] = workerFactory.apply(loops);
-        long t0 = System.nanoTime();
-        for (Thread worker : workers) worker.start();
+        for (Worker worker : workers) worker.start();
+        long tSum = 0L;
         try
         {
-            for (Thread worker : workers) worker.join();
+            for (Worker worker : workers)  {
+                worker.join();
+                tSum += worker.time;
+            }
         }
         catch (InterruptedException e)
         {
             throw new RuntimeException(e);
         }
-        return new Object[]{System.nanoTime() - t0};
+
+        double tAvg = (double) tSum / threads;
+        double vSum = 0L;
+        for (Worker worker : workers) {
+            vSum += ((double) worker.time - tAvg) * ((double) worker.time - tAvg);
+        }
+        double v = vSum / threads;
+        double σ = Math.sqrt(v);
+        return new Object[]{tAvg / loops, σ / loops};
     }
 
     static void testX(int threads, int loops)
     {
-        System.out.printf("\n%4d threads x %9d loops...\n\n", threads, loops);
+        System.out.printf("\n%3d threads, %,12d ops\n\n", threads, loops);
 
         // warm-up
         for (int i = 0; i < 5; i++)
@@ -72,14 +107,14 @@ public class RandomTest
         for (int i = 0; i < 5; i++)
             test(TLRNextIntWorker::new, threads, loops);
 
-        System.out.printf("TLR.current().nextInt(): ");
-        for (int i = 0; i < 7; i++)
-            System.out.printf(" %,15d ns", test(TLRCurrentNextIntWorker::new, threads, loops));
+        System.out.printf("TLR.current().nextInt()");
+        for (int i = 0; i < 5; i++)
+            System.out.printf(" | %,4.2f +- %,4.2f ns/op", test(TLRCurrentNextIntWorker::new, threads, loops));
         System.out.println();
 
-        System.out.printf("          tlr.nextInt(): ");
-        for (int i = 0; i < 7; i++)
-            System.out.printf(" %,15d ns", test(TLRNextIntWorker::new, threads, loops));
+        System.out.printf("          tlr.nextInt()");
+        for (int i = 0; i < 5; i++)
+            System.out.printf(" | %,4.2f +- %,4.2f ns/op", test(TLRNextIntWorker::new, threads, loops));
         System.out.println();
     }
 
