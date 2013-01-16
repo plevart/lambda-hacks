@@ -140,7 +140,11 @@ public class ThreadLocalRandom extends Random {
     /*
      * Current rnd value (seed)
      */
+    long p0, p1, p2, p3, p4, p5, p6, p7,
+         p8, p9, pA, pB, pC, pD, pE, pF;
     long rnd;
+    long q0, q1, q2, q3, q4, q5, q6, q7,
+         q8, q9, qA, qB, qC, qD, qE, qF;
 
     /** private Constructor */
     private ThreadLocalRandom(Thread homeThread, long seed) {
@@ -198,8 +202,8 @@ public class ThreadLocalRandom extends Random {
     }
 
     protected int next(int bits) {
-        if (Thread.currentThread() != homeThread)
-            return current().next(bits);
+//        if (Thread.currentThread() != homeThread)
+//            return current().next(bits);
         long r = (rnd * multiplier + addend) & mask;
         rnd = r;
         return (int) (r >>> (48-bits));
