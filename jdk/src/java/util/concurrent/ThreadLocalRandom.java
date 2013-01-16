@@ -135,7 +135,7 @@ public class ThreadLocalRandom extends Random {
     /*
      * Used to check the invoking thread and also serves as an indicator of initialized state
      */
-    final transient Thread localThread;
+    final transient Thread homeThread;
 
     /*
      * Current rnd value (seed)
@@ -143,9 +143,9 @@ public class ThreadLocalRandom extends Random {
     long rnd;
 
     /** private Constructor */
-    private ThreadLocalRandom(Thread localThread, long seed) {
+    private ThreadLocalRandom(Thread homeThread, long seed) {
         super(seed);
-        this.localThread = localThread;
+        this.homeThread = homeThread;
     }
 
     /**
@@ -192,14 +192,14 @@ public class ThreadLocalRandom extends Random {
      * @throws UnsupportedOperationException always
      */
     public void setSeed(long seed) {
-        if (localThread != null) // allow call from super() constructor
+        if (homeThread != null) // allow call from super() constructor
             throw new UnsupportedOperationException();
         rnd = seed;
     }
 
     protected int next(int bits) {
-        if (Thread.currentThread() != localThread)
-            throw new IllegalStateException("Not called from local thread");
+        if (Thread.currentThread() != homeThread)
+            return current().next(bits);
         long r = (rnd * multiplier + addend) & mask;
         rnd = r;
         return (int) (r >>> (48-bits));
