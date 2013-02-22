@@ -24,6 +24,8 @@
  */
 package java.lang.invoke;
 
+import sun.reflect.Reflection;
+
 import java.io.Serializable;
 import java.lang.reflect.Method;
 import java.security.AccessController;
@@ -39,7 +41,7 @@ import java.util.Objects;
  * @see LambdaMetafactory
  */
 public final class SerializedLambda implements Serializable {
-    private final String capturingClass;
+    private final Class<?> capturingClass;
     private final String functionalInterfaceClass;
     private final String functionalInterfaceMethodName;
     private final String functionalInterfaceMethodSignature;
@@ -73,7 +75,7 @@ public final class SerializedLambda implements Serializable {
                             Object[] capturedArgs) throws ReflectiveOperationException {
         MethodHandleInfo samMhi = new MethodHandleInfo(Objects.requireNonNull(functionalInterface));
         MethodHandleInfo implMhi = new MethodHandleInfo(Objects.requireNonNull(implementation));
-        this.capturingClass = Objects.requireNonNull(capturingClass).getName();
+        this.capturingClass = Objects.requireNonNull(capturingClass);
         this.capturedArgs = Objects.requireNonNull(capturedArgs).clone();
         this.functionalInterfaceClass = samMhi.getDeclaringClass().getName();
         this.functionalInterfaceMethodName = samMhi.getName();
@@ -118,7 +120,17 @@ public final class SerializedLambda implements Serializable {
                             String implMethodSignature,
                             String instantiatedMethodType,
                             Object[] capturedArgs) {
-        this.capturingClass = capturingClass;
+        try {
+            this.capturingClass = Class.forName(
+                capturingClass.replace('/', '.'),
+                false,
+                Reflection.getCallerClass(2).getClassLoader()
+            );
+        }
+        catch (ClassNotFoundException e) {
+            throw (Error) new NoClassDefFoundError(e.getMessage())
+                .initCause(e);
+        }
         this.functionalInterfaceMethodKind = functionalInterfaceMethodKind;
         this.functionalInterfaceClass = functionalInterfaceClass;
         this.functionalInterfaceMethodName = functionalInterfaceMethodName;
@@ -133,7 +145,7 @@ public final class SerializedLambda implements Serializable {
 
     /** Get the name of the class that captured this lambda */
     public String getCapturingClass() {
-        return capturingClass;
+        return capturingClass.getName().replace('.', '/');
     }
 
     /** Get the name of the functional interface class to which this lambda has been converted */
@@ -200,9 +212,7 @@ public final class SerializedLambda implements Serializable {
             Method deserialize = AccessController.doPrivileged(new PrivilegedExceptionAction<Method>() {
                 @Override
                 public Method run() throws Exception {
-                    Class<?> clazz = Class.forName(capturingClass.replace('/', '.'), true,
-                                                   Thread.currentThread().getContextClassLoader());
-                    Method m = clazz.getDeclaredMethod("$deserializeLambda$", SerializedLambda.class);
+                    Method m = capturingClass.getDeclaredMethod("$deserializeLambda$", SerializedLambda.class);
                     m.setAccessible(true);
                     return m;
                 }
