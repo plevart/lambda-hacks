@@ -24,8 +24,6 @@
  */
 package java.lang.invoke;
 
-import sun.reflect.Reflection;
-
 import java.io.Serializable;
 import java.lang.reflect.Method;
 import java.security.AccessController;
@@ -41,6 +39,7 @@ import java.util.Objects;
  * @see LambdaMetafactory
  */
 public final class SerializedLambda implements Serializable {
+    private static final long serialVersionUID = 8025925345765570181L;
     private final Class<?> capturingClass;
     private final String functionalInterfaceClass;
     private final String functionalInterfaceMethodName;
@@ -52,41 +51,6 @@ public final class SerializedLambda implements Serializable {
     private final int implMethodKind;
     private final String instantiatedMethodType;
     private final Object[] capturedArgs;
-
-    /**
-     * Create a {@code SerializedLambda} from the {@code MethodHandle} and {@code MethodType} information
-     * present at the lambda factory site.
-     *
-     * @param capturingClass The class in which the lambda expression appears
-     * @param functionalInterface A {@code MethodHandle} representing the functional interface descriptor
-     *                            for the lambda's target type
-     * @param implementation A {@code MethodHandle} identifying the method that implements the lambda expression's
-     *                       body, with any captured arguments prepended to the beginning of the argument list
-     * @param instantiatedMethodType The signature of the primary functional interface method after type variables
-     *                               are substituted with their instantiation from the capture site
-     * @param capturedArgs The dynamic arguments to the lambda factory site, which represent variables captured by
-     *                     the lambda
-     * @throws ReflectiveOperationException
-     */
-    public SerializedLambda(Class capturingClass,
-                            MethodHandle functionalInterface,
-                            MethodHandle implementation,
-                            MethodType instantiatedMethodType,
-                            Object[] capturedArgs) throws ReflectiveOperationException {
-        MethodHandleInfo samMhi = new MethodHandleInfo(Objects.requireNonNull(functionalInterface));
-        MethodHandleInfo implMhi = new MethodHandleInfo(Objects.requireNonNull(implementation));
-        this.capturingClass = Objects.requireNonNull(capturingClass);
-        this.capturedArgs = Objects.requireNonNull(capturedArgs).clone();
-        this.functionalInterfaceClass = samMhi.getDeclaringClass().getName();
-        this.functionalInterfaceMethodName = samMhi.getName();
-        this.functionalInterfaceMethodSignature = samMhi.getMethodType().toMethodDescriptorString();
-        this.functionalInterfaceMethodKind = samMhi.getReferenceKind();
-        this.implClass = implMhi.getClass().getName();
-        this.implMethodName = implMhi.getName();
-        this.implMethodSignature = implMhi.getMethodType().toMethodDescriptorString();
-        this.implMethodKind = implMhi.getReferenceKind();
-        this.instantiatedMethodType = instantiatedMethodType.toMethodDescriptorString();
-    }
 
     /**
      * Create a {@code SerializedLambda} from the low-level information present at the lambda factory site.
@@ -109,7 +73,7 @@ public final class SerializedLambda implements Serializable {
      * @param capturedArgs The dynamic arguments to the lambda factory site, which represent variables captured by
      *                     the lambda
      */
-    public SerializedLambda(String capturingClass,
+    public SerializedLambda(Class<?> capturingClass,
                             int functionalInterfaceMethodKind,
                             String functionalInterfaceClass,
                             String functionalInterfaceMethodName,
@@ -120,17 +84,7 @@ public final class SerializedLambda implements Serializable {
                             String implMethodSignature,
                             String instantiatedMethodType,
                             Object[] capturedArgs) {
-        try {
-            this.capturingClass = Class.forName(
-                capturingClass.replace('/', '.'),
-                false,
-                Reflection.getCallerClass(2).getClassLoader()
-            );
-        }
-        catch (ClassNotFoundException e) {
-            throw (Error) new NoClassDefFoundError(e.getMessage())
-                .initCause(e);
-        }
+        this.capturingClass = capturingClass;
         this.functionalInterfaceMethodKind = functionalInterfaceMethodKind;
         this.functionalInterfaceClass = functionalInterfaceClass;
         this.functionalInterfaceMethodName = functionalInterfaceMethodName;
@@ -240,14 +194,4 @@ public final class SerializedLambda implements Serializable {
                              MethodHandleInfo.getReferenceKindString(implMethodKind), implClass, implMethodName,
                              implMethodSignature, instantiatedMethodType, capturedArgs.length);
     }
-
-    /*
-    // @@@ Review question: is it worthwhile implementing a versioned serialization protocol?
-
-    private void readObject(java.io.ObjectInputStream s) throws java.io.IOException, ClassNotFoundException {
-    }
-
-    private void writeObject(java.io.ObjectOutputStream s) throws java.io.IOException {
-    }
-*/
 }
