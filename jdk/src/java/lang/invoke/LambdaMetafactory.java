@@ -25,6 +25,9 @@
 
 package java.lang.invoke;
 
+import java.util.concurrent.ConcurrentHashMap;
+import java.util.concurrent.ConcurrentMap;
+
 /**
  * <p>Bootstrap methods for converting lambda expressions and method references to functional interface objects.</p>
  *
@@ -265,6 +268,27 @@ public class LambdaMetafactory {
         mf = new InnerClassLambdaMetafactory(caller, invokedType, samMethod, implMethod, instantiatedMethodType,
                                              flags, markerInterfaces);
         mf.validateMetafactoryArgs();
-        return mf.buildCallSite();
+
+        MethodHandleInfo implInfo = new MethodHandleInfo(implMethod);
+        ConcurrentMap<String, CallSite> callSites = CALL_SITES_CV.get(implInfo.getDeclaringClass());
+        CallSite callSite = callSites.get(implInfo.getName());
+        if (callSite == null) {
+            callSite = mf.buildCallSite();
+            CallSite oldCallSite = callSites.putIfAbsent(implInfo.getName(), callSite);
+            if (oldCallSite != null)
+                callSite = oldCallSite;
+        }
+
+        return callSite;
     }
+
+    // each implementation method's declaring class has a Map of CallSites keyed by implementation method name
+
+    private static final ClassValue<ConcurrentMap<String, CallSite>> CALL_SITES_CV =
+        new ClassValue<ConcurrentMap<String, CallSite>>() {
+            @Override
+            protected ConcurrentMap<String, CallSite> computeValue(Class<?> type) {
+                return new ConcurrentHashMap<>();
+            }
+        };
 }
