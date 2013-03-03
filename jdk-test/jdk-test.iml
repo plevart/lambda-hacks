@@ -7,8 +7,9 @@
     </content>
     <orderEntry type="sourceFolder" forTests="false" />
     <orderEntry type="module" module-name="jdk" />
-    <orderEntry type="inheritedJdk" />
+    <orderEntry type="module" module-name="micro-bench" />
     <orderEntry type="library" name="org.testng:testng:6.8" level="application" />
+    <orderEntry type="inheritedJdk" />
   </component>
 </module>
 
