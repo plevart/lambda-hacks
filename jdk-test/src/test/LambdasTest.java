@@ -13,12 +13,18 @@ public class LambdasTest {
     }
 
     public static void main(String[] args) {
-        Runnable r = () -> {System.out.println("1");};
-        SerializableRunnable sr = () -> {System.out.println("2");};
+        SerializableRunnable sr1 = () -> {System.out.println("2");};
+        System.out.println("sr1: " + sr1);
+        System.out.println("---------");
 
         final LambdasTest t = new LambdasTest();
 
-        Runnable r2 = () -> {t.doIt();};
         SerializableRunnable sr2 = () -> {t.doIt();};
+        System.out.println("sr2: " + sr2);
+        System.out.println("---------");
+
+        SerializableRunnable sr3 = t::doIt;
+        System.out.println("sr3: " + sr3);
+        System.out.println("---------");
     }
 }
