@@ -26,8 +26,6 @@
 package java.lang.invoke;
 
 import java.util.Arrays;
-import java.util.concurrent.ConcurrentHashMap;
-import java.util.concurrent.ConcurrentMap;
 
 /**
  * <p>Bootstrap methods for converting lambda expressions and method references to functional interface objects.</p>
@@ -188,6 +186,18 @@ public class LambdaMetafactory {
                                        MethodHandle implMethod,
                                        MethodType instantiatedMethodType)
                    throws ReflectiveOperationException, LambdaConversionException {
+
+        System.out.println(
+            "altMetaFactory{" +
+                "\n  caller: " + caller +
+                "\n  invokedName: " + invokedName +
+                "\n  invokedType: " + invokedType +
+                "\n  samMethod: " + new MethodHandleInfo(samMethod) +
+                "\n  implMethod: " + new MethodHandleInfo(implMethod) +
+                "\n  instantiatedMethodType: " + instantiatedMethodType +
+                "\n}"
+        );
+
         AbstractValidatingLambdaMetafactory mf;
         mf = new InnerClassLambdaMetafactory(caller, invokedType, samMethod, implMethod, instantiatedMethodType,
                 0, EMPTY_CLASS_ARRAY);
@@ -283,27 +293,6 @@ public class LambdaMetafactory {
         mf = new InnerClassLambdaMetafactory(caller, invokedType, samMethod, implMethod, instantiatedMethodType,
                                              flags, markerInterfaces);
         mf.validateMetafactoryArgs();
-
-        MethodHandleInfo implInfo = new MethodHandleInfo(implMethod);
-        ConcurrentMap<String, CallSite> callSites = CALL_SITES_CV.get(implInfo.getDeclaringClass());
-        CallSite callSite = callSites.get(implInfo.getName());
-        if (callSite == null) {
-            callSite = mf.buildCallSite();
-            CallSite oldCallSite = callSites.putIfAbsent(implInfo.getName(), callSite);
-            if (oldCallSite != null)
-                callSite = oldCallSite;
-        }
-
-        return callSite;
+        return mf.buildCallSite();
     }
-
-    // each implementation method's declaring class has a Map of CallSites keyed by implementation method name
-
-    private static final ClassValue<ConcurrentMap<String, CallSite>> CALL_SITES_CV =
-        new ClassValue<ConcurrentMap<String, CallSite>>() {
-            @Override
-            protected ConcurrentMap<String, CallSite> computeValue(Class<?> type) {
-                return new ConcurrentHashMap<>();
-            }
-        };
 }

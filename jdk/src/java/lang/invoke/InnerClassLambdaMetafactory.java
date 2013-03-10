@@ -28,6 +28,9 @@ package java.lang.invoke;
 import java.lang.reflect.Constructor;
 import java.lang.reflect.Method;
 import java.security.ProtectionDomain;
+import java.util.Arrays;
+import java.util.concurrent.ConcurrentHashMap;
+import java.util.concurrent.ConcurrentMap;
 import java.util.concurrent.atomic.AtomicInteger;
 import jdk.internal.org.objectweb.asm.*;
 import static jdk.internal.org.objectweb.asm.Opcodes.*;
@@ -138,35 +141,130 @@ import java.security.PrivilegedAction;
      */
     @Override
     CallSite buildCallSite() throws ReflectiveOperationException, LambdaConversionException {
-        final Class<?> innerClass = spinInnerClass();
-        if (invokedType.parameterCount() == 0) {
-            final Constructor[] ctrs = AccessController.doPrivileged(
+
+        CallSiteKey key = new CallSiteKey(invokedType, samInfo, implInfo,
+                                          instantiatedMethodType, isSerializable, markerInterfaces);
+        ConcurrentMap<CallSiteKey, CallSite> callSiteMap = CALL_SITE_MAP_CV.get(targetClass);
+        CallSite callSite = callSiteMap.get(key);
+
+        if (callSite == null) {
+            final Class<?> innerClass = spinInnerClass();
+            if (invokedType.parameterCount() == 0) {
+                final Constructor[] ctrs = AccessController.doPrivileged(
                     new PrivilegedAction<Constructor[]>() {
-                @Override
-                public Constructor[] run() {
-                    return innerClass.getDeclaredConstructors();
+                        @Override
+                        public Constructor[] run() {
+                            return innerClass.getDeclaredConstructors();
+                        }
+                    }
+                );
+                if (ctrs.length != 1) {
+                    throw new ReflectiveOperationException(
+                        "Expected one lambda constructor for "
+                        + innerClass.getCanonicalName() + ", got " + ctrs.length
+                    );
                 }
-            });
-            if (ctrs.length != 1) {
-                throw new ReflectiveOperationException("Expected one lambda constructor for "
-                        + innerClass.getCanonicalName() + ", got " + ctrs.length);
+                // The lambda implementing inner class constructor is private, set
+                // it accessible (by us) before creating the constant sole instance
+                AccessController.doPrivileged(
+                    new PrivilegedAction<Void>() {
+                        @Override
+                        public Void run() {
+                            ctrs[0].setAccessible(true);
+                            return null;
+                        }
+                    }
+                );
+                Object inst = ctrs[0].newInstance();
+                callSite = new ConstantCallSite(MethodHandles.constant(samBase, inst));
             }
-            // The lambda implementing inner class constructor is private, set
-            // it accessible (by us) before creating the constant sole instance
-            AccessController.doPrivileged(new PrivilegedAction<Void>() {
-                @Override
-                public Void run() {
-                    ctrs[0].setAccessible(true);
-                    return null;
-                }
-            });
-            Object inst = ctrs[0].newInstance();
-            return new ConstantCallSite(MethodHandles.constant(samBase, inst));
-        } else {
-            return new ConstantCallSite(
+            else {
+                callSite = new ConstantCallSite(
                     MethodHandles.Lookup.IMPL_LOOKUP
                                         .findConstructor(innerClass, constructorType)
-                                        .asType(constructorType.changeReturnType(samBase)));
+                                        .asType(constructorType.changeReturnType(samBase))
+                );
+            }
+            CallSite oldCallSite = callSiteMap.putIfAbsent(key, callSite);
+            if (oldCallSite != null) { // in case of race
+                callSite = oldCallSite;
+            }
+        }
+
+        return callSite;
+    }
+
+    /**
+     * Each target class maintains a cache of {@link CallSite}s per relevant request parameters.
+     * The types encountered in the request parameters are always visible from the target class,
+     * so they may as well be referenced by the target class' j.l.Class object with no danger of
+     * class memory leaks.
+     */
+    private static final ClassValue<ConcurrentMap<CallSiteKey, CallSite>> CALL_SITE_MAP_CV =
+        new ClassValue<ConcurrentMap<InnerClassLambdaMetafactory.CallSiteKey, CallSite>>() {
+            @Override
+            protected ConcurrentMap<CallSiteKey, CallSite> computeValue(Class<?> type) {
+                return new ConcurrentHashMap<>();
+            }
+        };
+
+    static final class CallSiteKey {
+        private final MethodType invokedType;
+        private final MethodHandleInfo samInfo;
+        private final MethodHandleInfo implInfo;
+        private final MethodType instantiatedMethodType;
+        private final boolean isSerializable;
+        private final Class<?>[] markerInterfaces;
+
+        CallSiteKey(MethodType invokedType,
+                    MethodHandleInfo samInfo,
+                    MethodHandleInfo implInfo,
+                    MethodType instantiatedMethodType,
+                    boolean isSerializable,
+                    Class<?>[] markerInterfaces) {
+            this.invokedType = invokedType;
+            this.samInfo = samInfo;
+            this.implInfo = implInfo;
+            this.instantiatedMethodType = instantiatedMethodType;
+            this.isSerializable = isSerializable;
+            this.markerInterfaces = markerInterfaces;
+        }
+
+        @Override
+        public int hashCode() {
+            return hashCode(implInfo) ^
+                   hashCode(samInfo) ^
+                   invokedType.hashCode() ^
+                   instantiatedMethodType.hashCode() ^
+                   (isSerializable ? 1 : 0) ^
+                   Arrays.hashCode(markerInterfaces);
+        }
+
+        @Override
+        public boolean equals(Object obj) {
+            CallSiteKey other;
+            return obj != null &&
+                   obj.getClass() == CallSiteKey.class &&
+                   equals((other = (CallSiteKey) obj).implInfo, implInfo) &&
+                   equals(other.samInfo, samInfo) &&
+                   other.invokedType.equals(invokedType) &&
+                   other.instantiatedMethodType.equals(instantiatedMethodType) &&
+                   other.isSerializable == isSerializable &&
+                   Arrays.equals(other.markerInterfaces, markerInterfaces);
+        }
+
+        private static int hashCode(MethodHandleInfo mhi) {
+            return mhi.getDeclaringClass().hashCode() ^
+                   mhi.getName().hashCode() ^
+                   mhi.getMethodType().hashCode() ^
+                   mhi.getReferenceKind();
+        }
+
+        private static boolean equals(MethodHandleInfo mhi1, MethodHandleInfo mhi2) {
+            return mhi1.getDeclaringClass() == mhi2.getDeclaringClass() &&
+                   mhi1.getName().equals(mhi2.getName()) &&
+                   mhi1.getMethodType().equals(mhi2.getMethodType()) &&
+                   mhi1.getReferenceKind() == mhi2.getReferenceKind();
         }
     }
 
