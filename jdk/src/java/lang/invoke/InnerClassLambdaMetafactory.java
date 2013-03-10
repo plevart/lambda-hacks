@@ -141,7 +141,7 @@ import java.security.PrivilegedAction;
      */
     @Override
     CallSite buildCallSite() throws ReflectiveOperationException, LambdaConversionException {
-
+        // lookup cached CallSite
         CallSiteKey key = new CallSiteKey(invokedType, samInfo, implInfo,
                                           instantiatedMethodType, isSerializable, markerInterfaces);
         ConcurrentMap<CallSiteKey, CallSite> callSiteMap = CALL_SITE_MAP_CV.get(targetClass);
