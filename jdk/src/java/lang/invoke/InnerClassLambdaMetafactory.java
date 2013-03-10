@@ -156,34 +156,27 @@ import java.security.PrivilegedAction;
                         public Constructor[] run() {
                             return innerClass.getDeclaredConstructors();
                         }
-                    }
-                );
+                    });
                 if (ctrs.length != 1) {
-                    throw new ReflectiveOperationException(
-                        "Expected one lambda constructor for "
-                        + innerClass.getCanonicalName() + ", got " + ctrs.length
-                    );
+                    throw new ReflectiveOperationException("Expected one lambda constructor for "
+                                                           + innerClass.getCanonicalName() + ", got " + ctrs.length);
                 }
                 // The lambda implementing inner class constructor is private, set
                 // it accessible (by us) before creating the constant sole instance
-                AccessController.doPrivileged(
-                    new PrivilegedAction<Void>() {
-                        @Override
-                        public Void run() {
-                            ctrs[0].setAccessible(true);
-                            return null;
-                        }
+                AccessController.doPrivileged(new PrivilegedAction<Void>() {
+                    @Override
+                    public Void run() {
+                        ctrs[0].setAccessible(true);
+                        return null;
                     }
-                );
+                });
                 Object inst = ctrs[0].newInstance();
                 callSite = new ConstantCallSite(MethodHandles.constant(samBase, inst));
-            }
-            else {
+            } else {
                 callSite = new ConstantCallSite(
                     MethodHandles.Lookup.IMPL_LOOKUP
                                         .findConstructor(innerClass, constructorType)
-                                        .asType(constructorType.changeReturnType(samBase))
-                );
+                                        .asType(constructorType.changeReturnType(samBase)));
             }
             CallSite oldCallSite = callSiteMap.putIfAbsent(key, callSite);
             if (oldCallSite != null) { // in case of race
