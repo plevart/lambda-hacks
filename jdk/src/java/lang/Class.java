@@ -2238,15 +2238,15 @@ public final
             privateMapOffset = objectFieldOffset(fields, "privateMap");
         }
 
-        static <T> boolean compareAndSwap(Class<?> clazz,
-                                          SoftReference<ReflectionData<T>> oldData,
-                                          SoftReference<ReflectionData<T>> newData) {
+        static <T> boolean casReflectionData(Class<?> clazz,
+                                             SoftReference<ReflectionData<T>> oldData,
+                                             SoftReference<ReflectionData<T>> newData) {
             return unsafe.compareAndSwapObject(clazz, reflectionDataOffset, oldData, newData);
         }
 
-        static boolean compareAndSwap(Class<?> clazz,
-                                      ConcurrentMap<Object, Object> oldMap,
-                                      ConcurrentMap<Object, Object> newMap) {
+        static boolean casPrivateMap(Class<?> clazz,
+                                     ConcurrentMap<Object, Object> oldMap,
+                                     ConcurrentMap<Object, Object> newMap) {
             return unsafe.compareAndSwapObject(clazz, privateMapOffset, oldMap, newMap);
         }
     }
@@ -2306,7 +2306,7 @@ public final
         while (true) {
             ReflectionData<T> rd = new ReflectionData<>(classRedefinedCount);
             // try to CAS it...
-            if (Atomic.compareAndSwap(this, oldReflectionData, new SoftReference<>(rd))) {
+            if (Atomic.casReflectionData(this, oldReflectionData, new SoftReference<>(rd))) {
                 return rd;
             }
             // else retry
@@ -3210,11 +3210,12 @@ public final
     /**
      * Backing store for various platform-private values pertaining to this class.
      * To partition concerns, keys used as indexes into this Map should be chosen
-     * carefully (it's better to use private classes instead of public ones such as String, etc.).
+     * carefully (it's better to use private classes instead of public ones such
+     * as String, etc. for each concern, to avoid clashes).
      * Using this privateMap instead of classValueMap for platform-internal per-class storage
      * is preferred if semantics of normal ConcurrentMap are adequate for the use-case,
      * since it has a much lower space overhead. For example in 32 bit addressing
-     * modes the overhead in bytes (not counting useful payload: keys and values) for sizes 1..10 is:
+     * modes the overhead (not counting useful payload: keys and values) for sizes 1..10 is:
      * <pre>
      *                size():   1,   2,   3,    4,    5,    6,    7,    8,    9,   10 (entries)
      *  ConcurrentHashMap(5): 144, 176, 208,  240,  272,  336,  368,  400,  432,  464 (bytes)
@@ -3227,7 +3228,7 @@ public final
     ConcurrentMap<Object, Object> getPrivateMap() {
         ConcurrentMap<Object, Object> privateMap = this.privateMap;
         return privateMap != null ||
-                Atomic.compareAndSwap(this, null, privateMap = new ConcurrentHashMap<>(5))
+                Atomic.casPrivateMap(this, null, privateMap = new ConcurrentHashMap<>(5))
                 ? privateMap
                 : this.privateMap;
     }

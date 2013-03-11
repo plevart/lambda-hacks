@@ -143,18 +143,27 @@ import java.security.PrivilegedAction;
      */
     @Override
     CallSite buildCallSite() throws ReflectiveOperationException, LambdaConversionException {
-        // lookup cached inner Class
-        InnerClassKey key = new InnerClassKey(invokedType, samInfo, implInfo,
-                                          instantiatedMethodType, isSerializable, markerInterfaces);
-        ConcurrentMap<Object, Object> classPrivateMap = SharedSecrets.getJavaLangAccess().getClassPrivateMap(targetClass);
-        Class<?> clazz = (Class<?>) classPrivateMap.get(key);
+        Class<?> clazz;
+        // only do caching if requesting serialized proxy or if
+        // implementation method is not synthetically generated "lambda$...." method
+        // which means that a method reference is being converted into a SAM proxy
+        if (isSerializable || !implMethodName.startsWith("lambda$")) {
+            // lookup cached inner Class
+            InnerClassKey key = new InnerClassKey(invokedType, samInfo, implInfo,
+                                              instantiatedMethodType, isSerializable, markerInterfaces);
+            ConcurrentMap<Object, Object> classPrivateMap = SharedSecrets.getJavaLangAccess().getClassPrivateMap(targetClass);
+            clazz = (Class<?>) classPrivateMap.get(key);
 
-        if (clazz == null) {
-            clazz = spinInnerClass();
-            Class<?> oldClass = (Class<?>) classPrivateMap.putIfAbsent(key, clazz);
-            if (oldClass != null) {
-                clazz = oldClass;
+            if (clazz == null) {
+                clazz = spinInnerClass();
+                Class<?> oldClass = (Class<?>) classPrivateMap.putIfAbsent(key, clazz);
+                if (oldClass != null) {
+                    clazz = oldClass;
+                }
             }
+        }
+        else {
+            clazz = spinInnerClass();
         }
 
         final Class<?> innerClass = clazz;
@@ -223,7 +232,7 @@ import java.security.PrivilegedAction;
 
         private int add(int i, MethodHandleInfo methodHandleInfo) {
             parts[i++] = methodHandleInfo.getDeclaringClass().getName(); // Class.getName() already interned
-            parts[i++] = methodHandleInfo.getName().intern(); // already interned in j.l.r.Method.getName() but not always here
+            parts[i++] = methodHandleInfo.getName().intern(); // already interned in j.l.r.Method.getName() but not here
             parts[i++] = MethodHandleInfo.getReferenceKindString(methodHandleInfo.getReferenceKind()); // interned constants
             i = add(i, methodHandleInfo.getMethodType());
             return i;
@@ -256,7 +265,6 @@ import java.security.PrivilegedAction;
             if (i != parts.length) {
                 throw new IllegalStateException("Invalid 'parts' array length estimation");
             }
-            System.out.println(this);
         }
 
         @Override

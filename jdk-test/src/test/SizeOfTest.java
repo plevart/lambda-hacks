@@ -46,6 +46,14 @@ public class SizeOfTest {
             };
             r.run();
         }
+        static void test3() {
+            Runnable r = Test::test1;
+            r.run();
+        }
+        static void test4() {
+            Runnable r = Test::test1;
+            r.run();
+        }
     }
 
     static void compareSizes() {
@@ -81,6 +89,10 @@ public class SizeOfTest {
         Test.test1();
         sizeOf.deepSizeOf(Test.class);
         Test.test2();
+        sizeOf.deepSizeOf(Test.class);
+        Test.test3();
+        sizeOf.deepSizeOf(Test.class);
+        Test.test4();
         sizeOf.deepSizeOf(Test.class);
     }
 }
