@@ -16,5 +16,7 @@ public class LambdasTest {
         Runnable sr1 = (Runnable & Serializable & MarkerX) () -> {System.out.println("2");};
         System.out.println("sr1: " + sr1);
         System.out.println(((MarkerX) sr1).hash());
+
+        System.out.println(MarkerX.class.getName() == MarkerX.class.getName().intern());
     }
 }

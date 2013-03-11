@@ -188,7 +188,7 @@ public class LambdaMetafactory {
                    throws ReflectiveOperationException, LambdaConversionException {
 
         System.out.println(
-            "altMetaFactory{" +
+            "metaFactory{" +
                 "\n  caller: " + caller +
                 "\n  invokedName: " + invokedName +
                 "\n  invokedType: " + invokedType +
