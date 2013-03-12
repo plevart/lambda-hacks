@@ -187,16 +187,16 @@ public class LambdaMetafactory {
                                        MethodType instantiatedMethodType)
                    throws ReflectiveOperationException, LambdaConversionException {
 
-        System.out.println(
-            "metaFactory{" +
-                "\n  caller: " + caller +
-                "\n  invokedName: " + invokedName +
-                "\n  invokedType: " + invokedType +
-                "\n  samMethod: " + new MethodHandleInfo(samMethod) +
-                "\n  implMethod: " + new MethodHandleInfo(implMethod) +
-                "\n  instantiatedMethodType: " + instantiatedMethodType +
-                "\n}"
-        );
+//        System.out.println(
+//            "metaFactory{" +
+//                "\n  caller: " + caller +
+//                "\n  invokedName: " + invokedName +
+//                "\n  invokedType: " + invokedType +
+//                "\n  samMethod: " + new MethodHandleInfo(samMethod) +
+//                "\n  implMethod: " + new MethodHandleInfo(implMethod) +
+//                "\n  instantiatedMethodType: " + instantiatedMethodType +
+//                "\n}"
+//        );
 
         AbstractValidatingLambdaMetafactory mf;
         mf = new InnerClassLambdaMetafactory(caller, invokedType, samMethod, implMethod, instantiatedMethodType,
@@ -276,18 +276,18 @@ public class LambdaMetafactory {
         else
             markerInterfaces = EMPTY_CLASS_ARRAY;
 
-        System.out.println(
-            "altMetaFactory{" +
-            "\n  caller: " + caller +
-            "\n  invokedName: " + invokedName +
-            "\n  invokedType: " + invokedType +
-            "\n  samMethod: " + new MethodHandleInfo(samMethod) +
-            "\n  implMethod: " + new MethodHandleInfo(implMethod) +
-            "\n  instantiatedMethodType: " + instantiatedMethodType +
-            "\n  flags: " + flags +
-            "\n  markerInterfaces: " + Arrays.toString(markerInterfaces) +
-            "\n}"
-        );
+//        System.out.println(
+//            "altMetaFactory{" +
+//            "\n  caller: " + caller +
+//            "\n  invokedName: " + invokedName +
+//            "\n  invokedType: " + invokedType +
+//            "\n  samMethod: " + new MethodHandleInfo(samMethod) +
+//            "\n  implMethod: " + new MethodHandleInfo(implMethod) +
+//            "\n  instantiatedMethodType: " + instantiatedMethodType +
+//            "\n  flags: " + flags +
+//            "\n  markerInterfaces: " + Arrays.toString(markerInterfaces) +
+//            "\n}"
+//        );
 
         AbstractValidatingLambdaMetafactory mf;
         mf = new InnerClassLambdaMetafactory(caller, invokedType, samMethod, implMethod, instantiatedMethodType,

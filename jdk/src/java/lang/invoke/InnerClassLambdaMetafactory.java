@@ -78,7 +78,8 @@ import java.security.PrivilegedAction;
     private final ClassWriter cw;                    // ASM class writer
     private final Type[] argTypes;                   // ASM types for the constructor arguments
     private final String[] argNames;                 // Generated names for the constructor arguments
-    private final String lambdaClassName;            // Generated name for the generated class "X$$Lambda$1"
+    private final ClassLoader lambdaClassLoader;     // Defining ClassLoader for the generated class "X$$Lambda$1"
+    private final Class<?> lambdaOuterClass;         // The outer class of the generated class "X$$Lambda$1"
     private final Type[] instantiatedArgumentTypes;  // ASM types for the functional interface arguments
 
     /**
@@ -120,7 +121,21 @@ import java.security.PrivilegedAction;
         implMethodReturnType = implMethodAsmType.getReturnType();
         constructorType = invokedType.changeReturnType(Void.TYPE);
         constructorDesc = constructorType.toMethodDescriptorString();
-        lambdaClassName = targetClass.getName().replace('.', '/') + "$$Lambda$" + counter.incrementAndGet();
+        ClassLoader implClassLoader;
+        if (// only non-serializable proxy can be defined inside the impl method defining class
+            // (because of $deserializeLambda$ method not being there)
+            !isSerializable &&
+            // only bother to put the proxy class inside the impl method defining class if caching it
+            cacheGeneratedClass() &&
+            // check whether the types referenced from proxy class are visible
+            // from the impl method defining ClassLoader
+            canDefineLambdaWithClassLoader(implClassLoader = implDefiningClass.getClassLoader())) {
+            lambdaClassLoader = implClassLoader;
+            lambdaOuterClass = implDefiningClass;
+        } else {
+            lambdaClassLoader = targetClass.getClassLoader();
+            lambdaOuterClass = targetClass;
+        }
         cw = new ClassWriter(ClassWriter.COMPUTE_MAXS);
         argTypes = Type.getArgumentTypes(constructorDesc);
         argNames = new String[argTypes.length];
@@ -128,6 +143,47 @@ import java.security.PrivilegedAction;
             argNames[i] = "arg$" + (i + 1);
         }
         instantiatedArgumentTypes = Type.getArgumentTypes(instantiatedMethodType.toMethodDescriptorString());
+    }
+
+    private boolean canDefineLambdaWithClassLoader(ClassLoader classLoader) {
+        return
+                isClassVisibleByClassLoader(samBase, classLoader) &&
+                areClassesVisibleByClassLoader(markerInterfaces, classLoader) &&
+                isClassVisibleByClassLoader(invokedType.rtype(), classLoader) &&
+                areClassesVisibleByClassLoader(invokedType.ptypes(), classLoader) &&
+                isClassVisibleByClassLoader(instantiatedMethodType.rtype(), classLoader) &&
+                areClassesVisibleByClassLoader(instantiatedMethodType.ptypes(), classLoader);
+    }
+
+    private boolean areClassesVisibleByClassLoader(Class<?>[] klasses, ClassLoader classLoader) {
+        for (Class<?> klass : klasses) {
+            if (!isClassVisibleByClassLoader(klass, classLoader)) {
+                return false;
+            }
+        }
+        return true;
+    }
+
+    private boolean isClassVisibleByClassLoader(Class<?> klass, ClassLoader classLoader) {
+        if (klass.isPrimitive()) {
+            return true;
+        }
+        if (klass.isArray()) {
+            return isClassVisibleByClassLoader(klass.getComponentType(), classLoader);
+        }
+        try {
+            return klass == Class.forName(klass.getName(), false, classLoader);
+        }
+        catch (ClassNotFoundException e) {
+            return false;
+        }
+    }
+
+    private boolean cacheGeneratedClass() {
+        // only do caching if requesting serialized proxy or if
+        // implementation method is not synthetically generated "lambda$...." method
+        // (the later means that a method reference is being converted into a SAM proxy)
+        return isSerializable || !implMethodName.startsWith("lambda$");
     }
 
     /**
@@ -143,17 +199,14 @@ import java.security.PrivilegedAction;
      */
     @Override
     CallSite buildCallSite() throws ReflectiveOperationException, LambdaConversionException {
-        Class<?> clazz;
-        // only do caching if requesting serialized proxy or if
-        // implementation method is not synthetically generated "lambda$...." method
-        // (the later means that a method reference is being converted into a SAM proxy)
-        if (isSerializable || !implMethodName.startsWith("lambda$")) {
+        final Class<?> innerClass;
+        if (cacheGeneratedClass()) {
             // lookup cached inner Class
             InnerClassKey key = new InnerClassKey(invokedType, samInfo, implInfo,
                                               instantiatedMethodType, isSerializable, markerInterfaces);
-            ConcurrentMap<Object, Object> classPrivateMap = SharedSecrets.getJavaLangAccess().getClassPrivateMap(targetClass);
-            clazz = (Class<?>) classPrivateMap.get(key);
-
+            ConcurrentMap<Object, Object> classPrivateMap =
+                    SharedSecrets.getJavaLangAccess().getClassPrivateMap(lambdaOuterClass);
+            Class<?> clazz = (Class<?>) classPrivateMap.get(key);
             if (clazz == null) {
                 clazz = spinInnerClass();
                 Class<?> oldClass = (Class<?>) classPrivateMap.putIfAbsent(key, clazz);
@@ -161,53 +214,46 @@ import java.security.PrivilegedAction;
                     clazz = oldClass;
                 }
             }
+            innerClass = clazz;
         }
         else {
-            clazz = spinInnerClass();
+            innerClass = spinInnerClass();
         }
 
-        final Class<?> innerClass = clazz;
         if (invokedType.parameterCount() == 0) {
             final Constructor[] ctrs = AccessController.doPrivileged(
-                new PrivilegedAction<Constructor[]>() {
-                    @Override
-                    public Constructor[] run() {
-                        return innerClass.getDeclaredConstructors();
-                    }
-                }
-            );
+                    new PrivilegedAction<Constructor[]>() {
+                        @Override
+                        public Constructor[] run() {
+                            return innerClass.getDeclaredConstructors();
+                        }
+                    });
             if (ctrs.length != 1) {
-                throw new ReflectiveOperationException(
-                    "Expected one lambda constructor for "
-                    + innerClass.getCanonicalName() + ", got " + ctrs.length
-                );
+                throw new ReflectiveOperationException("Expected one lambda constructor for "
+                        + innerClass.getCanonicalName() + ", got " + ctrs.length);
             }
             // The lambda implementing inner class constructor is private, set
             // it accessible (by us) before creating the constant sole instance
-            AccessController.doPrivileged(
-                new PrivilegedAction<Void>() {
-                    @Override
-                    public Void run() {
-                        ctrs[0].setAccessible(true);
-                        return null;
-                    }
+            AccessController.doPrivileged(new PrivilegedAction<Void>() {
+                @Override
+                public Void run() {
+                    ctrs[0].setAccessible(true);
+                    return null;
                 }
-            );
+            });
             Object inst = ctrs[0].newInstance();
             return new ConstantCallSite(MethodHandles.constant(samBase, inst));
-        }
-        else {
+        } else {
             return new ConstantCallSite(
-                MethodHandles.Lookup.IMPL_LOOKUP
-                                    .findConstructor(innerClass, constructorType)
-                                    .asType(constructorType.changeReturnType(samBase))
-            );
+                    MethodHandles.Lookup.IMPL_LOOKUP
+                            .findConstructor(innerClass, constructorType)
+                            .asType(constructorType.changeReturnType(samBase)));
         }
     }
 
     /**
-     * Each target class maintains a cache of inner {@link Class} objects per relevant request parameters.
-     * The types encountered in the request parameters are always visible from the target class,
+     * Each lambdaOuterClass maintains a cache of inner {@link Class} objects per relevant request parameters.
+     * The types encountered in the request parameters are always visible from the lambdaOuterClass class,
      * so the symbolic names in the key are always unique when the types are unique. The key is
      * composed of already interned strings, so it's space overhead is just the length of the backing array.
      */
@@ -294,11 +340,13 @@ import java.security.PrivilegedAction;
      */
     private Class<?> spinInnerClass() throws LambdaConversionException {
         String samName = samBase.getName().replace('.', '/');
+        String lambdaClassName = lambdaOuterClass.getName().replace('.', '/') + "$$Lambda$" + counter.incrementAndGet();
         String[] interfaces = new String[markerInterfaces.length + 1];
         interfaces[0] = samName;
         for (int i=0; i<markerInterfaces.length; i++) {
             interfaces[i+1] = markerInterfaces[i].getName().replace('.', '/');
         }
+
         cw.visit(CLASSFILE_VERSION, ACC_SUPER,
                  lambdaClassName, null,
                  NAME_MAGIC_ACCESSOR_IMPL, interfaces);
@@ -310,7 +358,7 @@ import java.security.PrivilegedAction;
             fv.visitEnd();
         }
 
-        generateConstructor();
+        generateConstructor(lambdaClassName);
 
         MethodAnalyzer ma = new MethodAnalyzer();
 
@@ -318,7 +366,7 @@ import java.security.PrivilegedAction;
         if (ma.getSamMethod() == null) {
             throw new LambdaConversionException(String.format("Functional interface method not found: %s", samMethodType));
         } else {
-            generateForwardingMethod(ma.getSamMethod(), false);
+            generateForwardingMethod(ma.getSamMethod(), false, lambdaClassName);
         }
 
         // Forward the bridges
@@ -327,12 +375,12 @@ import java.security.PrivilegedAction;
         // @@@ classfile attribute to request custom bridging.  See 8002092.
         if (!ma.getMethodsToBridge().isEmpty() /* && !ma.conflictFoundBetweenDefaultAndBridge() */ ) {
             for (Method m : ma.getMethodsToBridge()) {
-                generateForwardingMethod(m, true);
+                generateForwardingMethod(m, true, lambdaClassName);
             }
         }
 
         if (isSerializable) {
-            generateWriteReplace();
+            generateWriteReplace(lambdaClassName);
         }
 
         cw.visitEnd();
@@ -350,26 +398,25 @@ import java.security.PrivilegedAction;
             }
         ***/
 
-        ClassLoader loader = targetClass.getClassLoader();
-        ProtectionDomain pd = (loader == null)
+        ProtectionDomain pd = (lambdaClassLoader == null)
             ? null
             : AccessController.doPrivileged(
             new PrivilegedAction<ProtectionDomain>() {
                 @Override
                 public ProtectionDomain run() {
-                    return targetClass.getProtectionDomain();
+                    return lambdaOuterClass.getProtectionDomain();
                 }
             }
         );
 
         return (Class<?>) Unsafe.getUnsafe().defineClass(lambdaClassName, classBytes, 0, classBytes.length,
-                                                                   loader, pd);
+                                                                   lambdaClassLoader, pd);
     }
 
     /**
      * Generate the constructor for the class
      */
-    private void generateConstructor() {
+    private void generateConstructor(String lambdaClassName) {
         // Generate constructor
         MethodVisitor ctor = cw.visitMethod(ACC_PRIVATE, NAME_CTOR, constructorDesc, null, null);
         ctor.visitCode();
@@ -390,7 +437,7 @@ import java.security.PrivilegedAction;
     /**
      * Generate the writeReplace method (if needed for serialization)
      */
-    private void generateWriteReplace() {
+    private void generateWriteReplace(String lambdaClassName) {
         TypeConvertingMethodAdapter mv
                 = new TypeConvertingMethodAdapter(cw.visitMethod(ACC_PRIVATE + ACC_FINAL,
                                                                  NAME_METHOD_WRITE_REPLACE, DESCR_METHOD_WRITE_REPLACE,
@@ -398,8 +445,8 @@ import java.security.PrivilegedAction;
 
         mv.visitCode();
         mv.visitTypeInsn(NEW, NAME_SERIALIZED_LAMBDA);
-        mv.visitInsn(DUP);;
-        mv.visitLdcInsn(Type.getType(targetClass));
+        mv.visitInsn(DUP);
+        mv.visitLdcInsn(Type.getType(lambdaOuterClass));
         mv.visitLdcInsn(samInfo.getReferenceKind());
         mv.visitLdcInsn(invokedType.returnType().getName().replace('.', '/'));
         mv.visitLdcInsn(samInfo.getName());
@@ -433,7 +480,7 @@ import java.security.PrivilegedAction;
      * @param m The method whose signature should be generated
      * @param isBridge True if this methods should be flagged as a bridge
      */
-    private void generateForwardingMethod(Method m, boolean isBridge) {
+    private void generateForwardingMethod(Method m, boolean isBridge, String lambdaClassName) {
         Class<?>[] exceptionTypes = m.getExceptionTypes();
         String[] exceptionNames = new String[exceptionTypes.length];
         for (int i = 0; i < exceptionTypes.length; i++) {
@@ -442,7 +489,7 @@ import java.security.PrivilegedAction;
         String methodDescriptor = Type.getMethodDescriptor(m);
         int access = isBridge? ACC_PUBLIC | ACC_BRIDGE : ACC_PUBLIC;
         MethodVisitor mv = cw.visitMethod(access, m.getName(), methodDescriptor, null, exceptionNames);
-        new ForwardingMethodGenerator(mv).generate(m);
+        new ForwardingMethodGenerator(mv, lambdaClassName).generate(m);
     }
 
     /**
@@ -451,8 +498,11 @@ import java.security.PrivilegedAction;
      */
     private class ForwardingMethodGenerator extends TypeConvertingMethodAdapter {
 
-        ForwardingMethodGenerator(MethodVisitor mv) {
+        private final String lambdaClassName;
+
+        ForwardingMethodGenerator(MethodVisitor mv, String lambdaClassName) {
             super(mv);
+            this.lambdaClassName = lambdaClassName;
         }
 
         void generate(Method m) throws InternalError {
