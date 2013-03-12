@@ -51,7 +51,7 @@ public class SizeOfTest {
             r.run();
         }
         static void test4() {
-            Runnable r = Test::test1;
+            Runnable r = Test::test2;
             r.run();
         }
     }

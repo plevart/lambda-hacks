@@ -146,7 +146,7 @@ import java.security.PrivilegedAction;
         Class<?> clazz;
         // only do caching if requesting serialized proxy or if
         // implementation method is not synthetically generated "lambda$...." method
-        // which means that a method reference is being converted into a SAM proxy
+        // (the later means that a method reference is being converted into a SAM proxy)
         if (isSerializable || !implMethodName.startsWith("lambda$")) {
             // lookup cached inner Class
             InnerClassKey key = new InnerClassKey(invokedType, samInfo, implInfo,
