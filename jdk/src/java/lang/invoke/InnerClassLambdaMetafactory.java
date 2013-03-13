@@ -29,7 +29,6 @@ import java.lang.reflect.Constructor;
 import java.lang.reflect.Method;
 import java.security.ProtectionDomain;
 import java.util.Arrays;
-import java.util.concurrent.ConcurrentHashMap;
 import java.util.concurrent.ConcurrentMap;
 import java.util.concurrent.atomic.AtomicInteger;
 import jdk.internal.org.objectweb.asm.*;
@@ -78,8 +77,9 @@ import java.security.PrivilegedAction;
     private final ClassWriter cw;                    // ASM class writer
     private final Type[] argTypes;                   // ASM types for the constructor arguments
     private final String[] argNames;                 // Generated names for the constructor arguments
-    private final ClassLoader lambdaClassLoader;     // Defining ClassLoader for the generated class "X$$Lambda$1"
-    private final Class<?> lambdaOuterClass;         // The outer class of the generated class "X$$Lambda$1"
+    private final ClassLoader lambdaClassLoader;     // Defining ClassLoader for the generated class
+    private final Class<?> lambdaProtectDomainClass; // The class which protection domain will be used for the generated class
+    private final String lambdaClassNamePrefix;      // The name of the generated class without unique index suffix "X$$Lambda$..."
     private final Type[] instantiatedArgumentTypes;  // ASM types for the functional interface arguments
 
     /**
@@ -121,7 +121,7 @@ import java.security.PrivilegedAction;
         implMethodReturnType = implMethodAsmType.getReturnType();
         constructorType = invokedType.changeReturnType(Void.TYPE);
         constructorDesc = constructorType.toMethodDescriptorString();
-        ClassLoader implClassLoader;
+        ClassLoader classLoader;
         if (// only non-serializable proxy can be defined inside the impl method defining class
             // (because of $deserializeLambda$ method not being there)
             !isSerializable &&
@@ -129,12 +129,29 @@ import java.security.PrivilegedAction;
             cacheGeneratedClass() &&
             // check whether the types referenced from proxy class are visible
             // from the impl method defining ClassLoader
-            canDefineLambdaWithClassLoader(implClassLoader = implDefiningClass.getClassLoader())) {
-            lambdaClassLoader = implClassLoader;
-            lambdaOuterClass = implDefiningClass;
+            canDefineLambdaWithClassLoader(classLoader = implDefiningClass.getClassLoader())
+            ) {
+            lambdaClassLoader = classLoader;
+            lambdaProtectDomainClass = implDefiningClass;
+            lambdaClassNamePrefix = samBase.getName().replace('.', '/') + "$$Lambda" +
+                                    getImplMethodNameSuffix();
+        } else if (
+            !isSerializable &&
+            cacheGeneratedClass() &&
+            // check whether the types referenced from proxy class are visible
+            // from the samBase defining ClassLoader
+            canDefineLambdaWithClassLoader(classLoader = samBase.getClassLoader())
+            ) {
+            lambdaClassLoader = classLoader;
+            lambdaProtectDomainClass = samBase;
+            lambdaClassNamePrefix = samBase.getName().replace('.', '/') + "$$Lambda" +
+                                    getImplMethodNameSuffix();
         } else {
             lambdaClassLoader = targetClass.getClassLoader();
-            lambdaOuterClass = targetClass;
+            lambdaProtectDomainClass = targetClass;
+            lambdaClassNamePrefix = targetClass.getName().replace('.', '/') + "$$Lambda$" +
+                                    samBase.getSimpleName() +
+                                    getImplMethodNameSuffix();
         }
         cw = new ClassWriter(ClassWriter.COMPUTE_MAXS);
         argTypes = Type.getArgumentTypes(constructorDesc);
@@ -145,9 +162,16 @@ import java.security.PrivilegedAction;
         instantiatedArgumentTypes = Type.getArgumentTypes(instantiatedMethodType.toMethodDescriptorString());
     }
 
+    private String getImplMethodNameSuffix() {
+        return implMethodName.startsWith("lambda$")
+           ? ""
+           : "$" + implDefiningClass.getSimpleName() + "$" + implMethodName;
+    }
+
     private boolean canDefineLambdaWithClassLoader(ClassLoader classLoader) {
         return
                 isClassVisibleByClassLoader(samBase, classLoader) &&
+                isClassVisibleByClassLoader(implDefiningClass, classLoader) &&
                 areClassesVisibleByClassLoader(markerInterfaces, classLoader) &&
                 isClassVisibleByClassLoader(invokedType.rtype(), classLoader) &&
                 areClassesVisibleByClassLoader(invokedType.ptypes(), classLoader) &&
@@ -202,21 +226,26 @@ import java.security.PrivilegedAction;
         final Class<?> innerClass;
         if (cacheGeneratedClass()) {
             // lookup cached inner Class
-            InnerClassKey key = new InnerClassKey(invokedType, samInfo, implInfo,
-                                              instantiatedMethodType, isSerializable, markerInterfaces);
-            ConcurrentMap<Object, Object> classPrivateMap =
-                    SharedSecrets.getJavaLangAccess().getClassPrivateMap(lambdaOuterClass);
-            Class<?> clazz = (Class<?>) classPrivateMap.get(key);
+            InnerClassKey key = new InnerClassKey(
+                invokedType,
+                samInfo,
+                implInfo,
+                instantiatedMethodType,
+                isSerializable ? targetClass : null,
+                markerInterfaces
+            );
+            ConcurrentMap<Object, Object> clPrivateMap =
+                SharedSecrets.getJavaLangAccess().getPrivateMap(lambdaClassLoader);
+            Class<?> clazz = (Class<?>) clPrivateMap.get(key);
             if (clazz == null) {
                 clazz = spinInnerClass();
-                Class<?> oldClass = (Class<?>) classPrivateMap.putIfAbsent(key, clazz);
+                Class<?> oldClass = (Class<?>) clPrivateMap.putIfAbsent(key, clazz);
                 if (oldClass != null) {
                     clazz = oldClass;
                 }
             }
             innerClass = clazz;
-        }
-        else {
+        } else {
             innerClass = spinInnerClass();
         }
 
@@ -252,8 +281,8 @@ import java.security.PrivilegedAction;
     }
 
     /**
-     * Each lambdaOuterClass maintains a cache of inner {@link Class} objects per relevant request parameters.
-     * The types encountered in the request parameters are always visible from the lambdaOuterClass class,
+     * Each lambdaClassLoader maintains a cache of inner {@link Class} objects per relevant request parameters.
+     * The types encountered in the request parameters are always visible from the lambdaClassLoader,
      * so the symbolic names in the key are always unique when the types are unique. The key is
      * composed of already interned strings, so it's space overhead is just the length of the backing array.
      */
@@ -288,12 +317,13 @@ import java.security.PrivilegedAction;
                       MethodHandleInfo samInfo,
                       MethodHandleInfo implInfo,
                       MethodType instantiatedMethodType,
-                      boolean isSerializable,
+                      Class<?> deserializeMethodDeclaringClass,
                       Class<?>[] markerInterfaces) {
             int len = length(implInfo) + 1 +
                     length(samInfo) + 1 +
                     length(invokedType) + 1 +
                     length(instantiatedMethodType) + 1 +
+                    (deserializeMethodDeclaringClass == null ? 0 : 1) + 1 +
                     markerInterfaces.length;
             parts = new String[len];
             int i = 0;
@@ -304,7 +334,11 @@ import java.security.PrivilegedAction;
             i = add(i, invokedType);
             parts[i++] = null; // delimiter
             i = add(i, instantiatedMethodType);
-            parts[i++] = isSerializable ? "/S" : "/N"; // also serves as delimiter, interned constants
+            parts[i++] = null; // delimiter
+            if (deserializeMethodDeclaringClass != null) {
+                parts[i++] = deserializeMethodDeclaringClass.getName(); // Class.getName() already interned
+            }
+            parts[i++] = null; // delimiter
             for (Class<?> markerInterface : markerInterfaces) {
                 parts[i++] = markerInterface.getName(); // Class.getName() already interned
             }
@@ -340,7 +374,7 @@ import java.security.PrivilegedAction;
      */
     private Class<?> spinInnerClass() throws LambdaConversionException {
         String samName = samBase.getName().replace('.', '/');
-        String lambdaClassName = lambdaOuterClass.getName().replace('.', '/') + "$$Lambda$" + counter.incrementAndGet();
+        String lambdaClassName = lambdaClassNamePrefix + "$" + counter.incrementAndGet();
         String[] interfaces = new String[markerInterfaces.length + 1];
         interfaces[0] = samName;
         for (int i=0; i<markerInterfaces.length; i++) {
@@ -404,7 +438,7 @@ import java.security.PrivilegedAction;
             new PrivilegedAction<ProtectionDomain>() {
                 @Override
                 public ProtectionDomain run() {
-                    return lambdaOuterClass.getProtectionDomain();
+                    return lambdaProtectDomainClass.getProtectionDomain();
                 }
             }
         );
@@ -446,7 +480,7 @@ import java.security.PrivilegedAction;
         mv.visitCode();
         mv.visitTypeInsn(NEW, NAME_SERIALIZED_LAMBDA);
         mv.visitInsn(DUP);
-        mv.visitLdcInsn(Type.getType(lambdaOuterClass));
+        mv.visitLdcInsn(Type.getType(targetClass));
         mv.visitLdcInsn(samInfo.getReferenceKind());
         mv.visitLdcInsn(invokedType.returnType().getName().replace('.', '/'));
         mv.visitLdcInsn(samInfo.getName());

@@ -102,5 +102,10 @@ public interface JavaLangAccess {
     /**
      * Returns backing store for various platform-private values pertaining to j.l.Class instances.
      */
-    ConcurrentMap<Object, Object> getClassPrivateMap(Class<?> clazz);
+    ConcurrentMap<Object, Object> getPrivateMap(Class<?> clazz);
+
+    /**
+     * Returns backing store for various platform-private values pertaining to j.l.ClassLoader instances.
+     */
+    ConcurrentMap<Object, Object> getPrivateMap(ClassLoader loader);
 }
