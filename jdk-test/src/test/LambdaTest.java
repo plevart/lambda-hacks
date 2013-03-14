@@ -41,27 +41,19 @@ public class LambdaTest {
         @Override
         protected Class<?> loadClass(String name, boolean resolve) throws ClassNotFoundException {
 //            System.out.println(this + ": initiated loading " + name);
-            if (name.startsWith(packagePrefix)) {
-                return loadModuleClass(name, resolve);
-            } else {
-                // not our class, 1st delegate to dependencies
-                for (ModuleLoader dependency : dependencies) {
-                    try {
-                        return dependency.loadModuleClass(name, resolve);
-                    }
-                    catch (ClassNotFoundException e) {
-                        // ignore
-                    }
-                }
-                // then delegate to super (1st parent, then us...)
-                return super.loadClass(name, resolve);
+            Class<?> klass = loadModuleClass(name, resolve);
+            if (klass != null) return klass;
+            // try dependencies
+            for (ModuleLoader dependency : dependencies) {
+                klass = dependency.loadModuleClass(name, resolve);
+                if (klass != null) return klass;
             }
+            // delegate to super
+            return super.loadClass(name, resolve);
         }
 
         private Class<?> loadModuleClass(String name, boolean resolve) throws ClassNotFoundException {
-            if (!name.startsWith(packagePrefix)) {
-                throw new ClassNotFoundException(name);
-            }
+            if (!name.startsWith(packagePrefix)) return null;
             synchronized (getClassLoadingLock(name)) {
                 Class<?> c = findLoadedClass(name);
                 if (c == null) {
@@ -81,7 +73,8 @@ public class LambdaTest {
                 if (is != null) {
                     byte[] bytes = IOUtils.readFully(is, -1, true);
                     return defineClass(name, bytes, 0, bytes.length);
-                } else {
+                }
+                else {
                     throw new ClassNotFoundException(name);
                 }
             }
