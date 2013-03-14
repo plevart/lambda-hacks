@@ -5,10 +5,15 @@
  */
 package test.z;
 
+import java.io.ByteArrayInputStream;
+import java.io.ByteArrayOutputStream;
+import java.io.IOException;
+import java.io.ObjectInputStream;
+import java.io.ObjectOutputStream;
 import java.io.Serializable;
+import java.lang.reflect.Field;
 import java.util.function.IntBinaryOperator;
 
-import static test.LambdaTest.*;
 
 /**
  * @author peter
@@ -38,5 +43,54 @@ public class TestApp implements Runnable {
     @Override
     public void run() {
         dump(this);
+    }
+
+    static void dump(Object bean) {
+        System.out.println("\n" + bean + " {");
+        for (Field f : bean.getClass().getDeclaredFields()) {
+            try {
+                Object lambda = f.get(bean);
+                System.out.printf(
+                    "  %40s %20s = %-50s // %s\n",
+                    f.getType().getName(),
+                    f.getName(),
+                    String.valueOf(lambda),
+                    String.valueOf(lambda.getClass().getClassLoader())
+                );
+            }
+            catch (IllegalAccessException e) {
+                throw new IllegalAccessError(e.getMessage());
+            }
+        }
+        System.out.println("}");
+    }
+
+    static byte[] serialize(Object o) {
+        ByteArrayOutputStream baos;
+        try (
+            ObjectOutputStream oos =
+                new ObjectOutputStream(baos = new ByteArrayOutputStream())
+        ) {
+            oos.writeObject(o);
+        }
+        catch (IOException e) {
+            throw new RuntimeException(e);
+        }
+        return baos.toByteArray();
+    }
+
+    static <T> T deserialize(byte[] bytes) {
+        try (
+            ObjectInputStream ois =
+                new ObjectInputStream(new ByteArrayInputStream(bytes))
+        ) {
+            T res = (T) ois.readObject();
+            System.out.println("deserialized: " + res + " loaded with: " + res.getClass().getClassLoader()
+                               + " latestUserDefinedLoader would be: " + sun.misc.VM.latestUserDefinedLoader());
+            return res;
+        }
+        catch (IOException | ClassNotFoundException e) {
+            throw new RuntimeException(e);
+        }
     }
 }

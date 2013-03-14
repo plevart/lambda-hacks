@@ -6,16 +6,9 @@
 package test;
 
 import sun.misc.IOUtils;
-import sun.reflect.Reflection;
 
-import java.io.ByteArrayInputStream;
-import java.io.ByteArrayOutputStream;
 import java.io.IOException;
 import java.io.InputStream;
-import java.io.ObjectInputStream;
-import java.io.ObjectOutputStream;
-import java.io.ObjectStreamClass;
-import java.lang.reflect.Field;
 
 public class LambdaTest {
 
@@ -32,67 +25,6 @@ public class LambdaTest {
         Class<?> testAppClass = loaderZ.loadClass("test.z.TestApp");
         Runnable testApp = (Runnable) testAppClass.newInstance();
         testApp.run();
-    }
-
-    public static void dump(Object bean) {
-        System.out.println("\n" + bean + " {");
-        for (Field f : bean.getClass().getDeclaredFields()) {
-            try {
-                Object lambda = f.get(bean);
-                System.out.printf(
-                    "  %40s %20s = %-50s // %s\n",
-                    f.getType().getName(),
-                    f.getName(),
-                    String.valueOf(lambda),
-                    String.valueOf(lambda.getClass().getClassLoader())
-                );
-            }
-            catch (IllegalAccessException e) {
-                throw new IllegalAccessError(e.getMessage());
-            }
-        }
-        System.out.println("}");
-    }
-
-    public static byte[] serialize(Object o) {
-        ByteArrayOutputStream baos;
-        try (
-            ObjectOutputStream oos =
-                new ObjectOutputStream(baos = new ByteArrayOutputStream())
-        ) {
-            oos.writeObject(o);
-        }
-        catch (IOException e) {
-            throw new RuntimeException(e);
-        }
-        return baos.toByteArray();
-    }
-
-    public static <T> T deserialize(byte[] bytes) {
-        final ClassLoader callerLoader = Reflection.getCallerClass(2).getClassLoader();
-        try (
-            ObjectInputStream ois =
-                new ObjectInputStream(new ByteArrayInputStream(bytes)) {
-                    @Override
-                    protected Class<?> resolveClass(ObjectStreamClass desc)
-                        throws IOException, ClassNotFoundException {
-                        String name = desc.getName();
-                        try {
-                            return Class.forName(name, false, callerLoader);
-                        }
-                        catch (ClassNotFoundException ex) {
-                            return super.resolveClass(desc);
-                        }
-                    }
-                }
-        ) {
-            T res = (T) ois.readObject();
-            System.out.println("deserialized: " + res + " loaded with: " + res.getClass().getClassLoader() + " latestUserDefinedLoader would be: " + sun.misc.VM.latestUserDefinedLoader());
-            return res;
-        }
-        catch (IOException | ClassNotFoundException e) {
-            throw new RuntimeException(e);
-        }
     }
 
     static class ModuleLoader extends ClassLoader {
