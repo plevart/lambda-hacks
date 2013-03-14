@@ -29,11 +29,12 @@ import java.lang.reflect.Constructor;
 import java.lang.reflect.Method;
 import java.security.ProtectionDomain;
 import java.util.Arrays;
-import java.util.concurrent.ConcurrentHashMap;
 import java.util.concurrent.ConcurrentMap;
 import java.util.concurrent.atomic.AtomicInteger;
 import jdk.internal.org.objectweb.asm.*;
 import static jdk.internal.org.objectweb.asm.Opcodes.*;
+
+import sun.misc.SharedSecrets;
 import sun.misc.Unsafe;
 import java.security.AccessController;
 import java.security.PrivilegedAction;
@@ -76,7 +77,9 @@ import java.security.PrivilegedAction;
     private final ClassWriter cw;                    // ASM class writer
     private final Type[] argTypes;                   // ASM types for the constructor arguments
     private final String[] argNames;                 // Generated names for the constructor arguments
-    private final String lambdaClassName;            // Generated name for the generated class "X$$Lambda$1"
+    private final ClassLoader lambdaClassLoader;     // Defining ClassLoader for the generated class
+    private final Class<?> lambdaProtectDomainClass; // The class which protection domain will be used for the generated class
+    private final String lambdaClassNamePrefix;      // The name of the generated class without unique index suffix "X$$Lambda$..."
     private final Type[] instantiatedArgumentTypes;  // ASM types for the functional interface arguments
 
     /**
@@ -118,7 +121,40 @@ import java.security.PrivilegedAction;
         implMethodReturnType = implMethodAsmType.getReturnType();
         constructorType = invokedType.changeReturnType(Void.TYPE);
         constructorDesc = constructorType.toMethodDescriptorString();
-        lambdaClassName = targetClass.getName().replace('.', '/') + "$$Lambda$" + counter.incrementAndGet();
+        ClassLoader classLoader;
+        if (// only non-serializable proxy can be defined inside the impl method defining class
+            // (because of $deserializeLambda$ method not being there)
+            !isSerializable &&
+            // only bother to put the proxy class inside the impl method defining class if caching it
+            cacheGeneratedClass() &&
+            // check whether the types referenced from proxy class are visible
+            // from the impl method defining ClassLoader
+            canDefineLambdaWithClassLoader(classLoader = implDefiningClass.getClassLoader())
+            ) {
+            lambdaClassLoader = classLoader;
+            lambdaProtectDomainClass = implDefiningClass;
+            lambdaClassNamePrefix = implDefiningClass.getName().replace('.', '/') +
+                                    "$$Lambda" +
+                                    getImplMethodNameSuffix();
+        } else if (
+            !isSerializable &&
+            cacheGeneratedClass() &&
+            // check whether the types referenced from proxy class are visible
+            // from the samBase defining ClassLoader
+            canDefineLambdaWithClassLoader(classLoader = samBase.getClassLoader())
+            ) {
+            lambdaClassLoader = classLoader;
+            lambdaProtectDomainClass = samBase;
+            lambdaClassNamePrefix = samBase.getName().replace('.', '/') +
+                                    "$$Lambda" +
+                                    getImplMethodNameSuffix();
+        } else {
+            lambdaClassLoader = targetClass.getClassLoader();
+            lambdaProtectDomainClass = targetClass;
+            lambdaClassNamePrefix = targetClass.getName().replace('.', '/') + "$$Lambda$" +
+                                    samBase.getSimpleName() +
+                                    getImplMethodNameSuffix();
+        }
         cw = new ClassWriter(ClassWriter.COMPUTE_MAXS);
         argTypes = Type.getArgumentTypes(constructorDesc);
         argNames = new String[argTypes.length];
@@ -126,6 +162,70 @@ import java.security.PrivilegedAction;
             argNames[i] = "arg$" + (i + 1);
         }
         instantiatedArgumentTypes = Type.getArgumentTypes(instantiatedMethodType.toMethodDescriptorString());
+    }
+
+    private String getImplMethodNameSuffix() {
+        return implMethodName.startsWith("lambda$")
+           ? ""
+           : "$" + implMethodName;
+    }
+
+    private boolean canDefineLambdaWithClassLoader(ClassLoader classLoader) {
+        boolean can =
+                isClassVisibleByClassLoader(samBase, classLoader) &&
+                isClassVisibleByClassLoader(implDefiningClass, classLoader) &&
+                areClassesVisibleByClassLoader(markerInterfaces, classLoader) &&
+                isClassVisibleByClassLoader(invokedType.rtype(), classLoader) &&
+                areClassesVisibleByClassLoader(invokedType.ptypes(), classLoader) &&
+                isClassVisibleByClassLoader(instantiatedMethodType.rtype(), classLoader) &&
+                areClassesVisibleByClassLoader(instantiatedMethodType.ptypes(), classLoader);
+
+//        System.out.println("canDefineLambdaWithClassLoader: " + classLoader + " {");
+//        System.out.println("                 samBase: " + samBase);
+//        System.out.println("       implDefiningClass: " + implDefiningClass);
+//        System.out.println("        markerInterfaces: " + markerInterfaces);
+//        System.out.println("             invokedType: " + invokedType);
+//        System.out.println("  instantiatedMethodType: " + instantiatedMethodType);
+//        System.out.println("} -> " + can);
+
+        return can;
+    }
+
+    private boolean areClassesVisibleByClassLoader(Class<?>[] klasses, ClassLoader classLoader) {
+        for (Class<?> klass : klasses) {
+            if (!isClassVisibleByClassLoader(klass, classLoader)) {
+                return false;
+            }
+        }
+        return true;
+    }
+
+    private boolean isClassVisibleByClassLoader(Class<?> klass, ClassLoader classLoader) {
+        boolean visible = isVisible0(klass, classLoader);
+//        System.out.println("is " + klass.getName() + " (loaded by " + klass.getClassLoader() + ") visible by " + classLoader + ": " + visible);
+        return visible;
+    }
+
+    private boolean isVisible0(Class<?> klass, ClassLoader classLoader) {
+        if (klass.isPrimitive()) {
+            return true;
+        }
+        if (klass.isArray()) {
+            return isClassVisibleByClassLoader(klass.getComponentType(), classLoader);
+        }
+        try {
+            return klass == Class.forName(klass.getName(), false, classLoader);
+        }
+        catch (ClassNotFoundException e) {
+            return false;
+        }
+    }
+
+    private boolean cacheGeneratedClass() {
+        // only do caching if requesting serialized proxy or if
+        // implementation method is not synthetically generated "lambda$...." method
+        // (the later means that a method reference is being converted into a SAM proxy)
+        return isSerializable || !implMethodName.startsWith("lambda$");
     }
 
     /**
@@ -141,123 +241,145 @@ import java.security.PrivilegedAction;
      */
     @Override
     CallSite buildCallSite() throws ReflectiveOperationException, LambdaConversionException {
-        // lookup cached CallSite
-        CallSiteKey key = new CallSiteKey(invokedType, samInfo, implInfo,
-                                          instantiatedMethodType, isSerializable, markerInterfaces);
-        ConcurrentMap<CallSiteKey, CallSite> callSiteMap = CALL_SITE_MAP_CV.get(targetClass);
-        CallSite callSite = callSiteMap.get(key);
+        final Class<?> innerClass;
+        if (cacheGeneratedClass()) {
+            // lookup cached inner Class
+            InnerClassKey key = new InnerClassKey(
+                invokedType,
+                samInfo,
+                implInfo,
+                instantiatedMethodType,
+                isSerializable ? targetClass : null,
+                markerInterfaces
+            );
+            ConcurrentMap<Object, Object> clPrivateMap =
+                SharedSecrets.getJavaLangAccess().getPrivateMap(lambdaClassLoader);
+            Class<?> clazz = (Class<?>) clPrivateMap.get(key);
+            if (clazz == null) {
+                clazz = spinInnerClass();
+                Class<?> oldClass = (Class<?>) clPrivateMap.putIfAbsent(key, clazz);
+                if (oldClass != null) {
+                    clazz = oldClass;
+                }
+            }
+            innerClass = clazz;
+        } else {
+            innerClass = spinInnerClass();
+        }
 
-        if (callSite == null) {
-            final Class<?> innerClass = spinInnerClass();
-            if (invokedType.parameterCount() == 0) {
-                final Constructor[] ctrs = AccessController.doPrivileged(
+        if (invokedType.parameterCount() == 0) {
+            final Constructor[] ctrs = AccessController.doPrivileged(
                     new PrivilegedAction<Constructor[]>() {
                         @Override
                         public Constructor[] run() {
                             return innerClass.getDeclaredConstructors();
                         }
                     });
-                if (ctrs.length != 1) {
-                    throw new ReflectiveOperationException("Expected one lambda constructor for "
-                                                           + innerClass.getCanonicalName() + ", got " + ctrs.length);
+            if (ctrs.length != 1) {
+                throw new ReflectiveOperationException("Expected one lambda constructor for "
+                        + innerClass.getCanonicalName() + ", got " + ctrs.length);
+            }
+            // The lambda implementing inner class constructor is private, set
+            // it accessible (by us) before creating the constant sole instance
+            AccessController.doPrivileged(new PrivilegedAction<Void>() {
+                @Override
+                public Void run() {
+                    ctrs[0].setAccessible(true);
+                    return null;
                 }
-                // The lambda implementing inner class constructor is private, set
-                // it accessible (by us) before creating the constant sole instance
-                AccessController.doPrivileged(new PrivilegedAction<Void>() {
-                    @Override
-                    public Void run() {
-                        ctrs[0].setAccessible(true);
-                        return null;
-                    }
-                });
-                Object inst = ctrs[0].newInstance();
-                callSite = new ConstantCallSite(MethodHandles.constant(samBase, inst));
-            } else {
-                callSite = new ConstantCallSite(
+            });
+            Object inst = ctrs[0].newInstance();
+            return new ConstantCallSite(MethodHandles.constant(samBase, inst));
+        } else {
+            return new ConstantCallSite(
                     MethodHandles.Lookup.IMPL_LOOKUP
-                                        .findConstructor(innerClass, constructorType)
-                                        .asType(constructorType.changeReturnType(samBase)));
-            }
-            CallSite oldCallSite = callSiteMap.putIfAbsent(key, callSite);
-            if (oldCallSite != null) { // in case of race
-                callSite = oldCallSite;
-            }
+                            .findConstructor(innerClass, constructorType)
+                            .asType(constructorType.changeReturnType(samBase)));
         }
-
-        return callSite;
     }
 
     /**
-     * Each target class maintains a cache of {@link CallSite}s per relevant request parameters.
-     * The types encountered in the request parameters are always visible from the target class,
-     * so they may as well be referenced by the target class' j.l.Class object with no danger of
-     * class memory leaks.
+     * Each lambdaClassLoader maintains a cache of inner {@link Class} objects per relevant request parameters.
+     * The types encountered in the request parameters are always visible from the lambdaClassLoader,
+     * so the symbolic names in the key are always unique when the types are unique. The key is
+     * composed of already interned strings, so it's space overhead is just the length of the backing array.
      */
-    private static final ClassValue<ConcurrentMap<CallSiteKey, CallSite>> CALL_SITE_MAP_CV =
-        new ClassValue<ConcurrentMap<InnerClassLambdaMetafactory.CallSiteKey, CallSite>>() {
-            @Override
-            protected ConcurrentMap<CallSiteKey, CallSite> computeValue(Class<?> type) {
-                return new ConcurrentHashMap<>();
+    private static final class InnerClassKey {
+        private final String[] parts;
+
+        private int length(MethodType methodType) {
+            return 1 + methodType.parameterCount();
+        }
+
+        private int add(int i, MethodType methodType) {
+            parts[i++] = methodType.rtype().getName(); // Class.getName() already interned
+            for (Class<?> ptype : methodType.ptypes()) {
+                parts[i++] = ptype.getName(); // Class.getName() already interned
             }
-        };
+            return i;
+        }
 
-    static final class CallSiteKey {
-        private final MethodType invokedType;
-        private final MethodHandleInfo samInfo;
-        private final MethodHandleInfo implInfo;
-        private final MethodType instantiatedMethodType;
-        private final boolean isSerializable;
-        private final Class<?>[] markerInterfaces;
+        private int length(MethodHandleInfo methodHandleInfo) {
+            return 3 + length(methodHandleInfo.getMethodType());
+        }
 
-        CallSiteKey(MethodType invokedType,
-                    MethodHandleInfo samInfo,
-                    MethodHandleInfo implInfo,
-                    MethodType instantiatedMethodType,
-                    boolean isSerializable,
-                    Class<?>[] markerInterfaces) {
-            this.invokedType = invokedType;
-            this.samInfo = samInfo;
-            this.implInfo = implInfo;
-            this.instantiatedMethodType = instantiatedMethodType;
-            this.isSerializable = isSerializable;
-            this.markerInterfaces = markerInterfaces;
+        private int add(int i, MethodHandleInfo methodHandleInfo) {
+            parts[i++] = methodHandleInfo.getDeclaringClass().getName(); // Class.getName() already interned
+            parts[i++] = methodHandleInfo.getName().intern(); // already interned in j.l.r.Method.getName() but not here
+            parts[i++] = MethodHandleInfo.getReferenceKindString(methodHandleInfo.getReferenceKind()); // interned constants
+            i = add(i, methodHandleInfo.getMethodType());
+            return i;
+        }
+
+        InnerClassKey(MethodType invokedType,
+                      MethodHandleInfo samInfo,
+                      MethodHandleInfo implInfo,
+                      MethodType instantiatedMethodType,
+                      Class<?> deserializeMethodDeclaringClass,
+                      Class<?>[] markerInterfaces) {
+            int len = length(implInfo) + 1 +
+                    length(samInfo) + 1 +
+                    length(invokedType) + 1 +
+                    length(instantiatedMethodType) + 1 +
+                    (deserializeMethodDeclaringClass == null ? 0 : 1) + 1 +
+                    markerInterfaces.length;
+            parts = new String[len];
+            int i = 0;
+            i = add(i, implInfo);
+            parts[i++] = null; // delimiter
+            i = add(i, samInfo);
+            parts[i++] = null; // delimiter
+            i = add(i, invokedType);
+            parts[i++] = null; // delimiter
+            i = add(i, instantiatedMethodType);
+            parts[i++] = null; // delimiter
+            if (deserializeMethodDeclaringClass != null) {
+                parts[i++] = deserializeMethodDeclaringClass.getName(); // Class.getName() already interned
+            }
+            parts[i++] = null; // delimiter
+            for (Class<?> markerInterface : markerInterfaces) {
+                parts[i++] = markerInterface.getName(); // Class.getName() already interned
+            }
+            if (i != parts.length) {
+                throw new IllegalStateException("Invalid 'parts' array length estimation");
+            }
         }
 
         @Override
         public int hashCode() {
-            return hashCode(implInfo) ^
-                   hashCode(samInfo) ^
-                   invokedType.hashCode() ^
-                   instantiatedMethodType.hashCode() ^
-                   (isSerializable ? 1 : 0) ^
-                   Arrays.hashCode(markerInterfaces);
+            return Arrays.hashCode(parts);
         }
 
         @Override
         public boolean equals(Object obj) {
-            CallSiteKey other;
             return obj != null &&
-                   obj.getClass() == CallSiteKey.class &&
-                   equals((other = (CallSiteKey) obj).implInfo, implInfo) &&
-                   equals(other.samInfo, samInfo) &&
-                   other.invokedType.equals(invokedType) &&
-                   other.instantiatedMethodType.equals(instantiatedMethodType) &&
-                   other.isSerializable == isSerializable &&
-                   Arrays.equals(other.markerInterfaces, markerInterfaces);
+                    obj.getClass() == InnerClassKey.class &&
+                    Arrays.equals(((InnerClassKey) obj).parts, parts);
         }
 
-        private static int hashCode(MethodHandleInfo mhi) {
-            return mhi.getDeclaringClass().hashCode() ^
-                   mhi.getName().hashCode() ^
-                   mhi.getMethodType().hashCode() ^
-                   mhi.getReferenceKind();
-        }
-
-        private static boolean equals(MethodHandleInfo mhi1, MethodHandleInfo mhi2) {
-            return mhi1.getDeclaringClass() == mhi2.getDeclaringClass() &&
-                   mhi1.getName().equals(mhi2.getName()) &&
-                   mhi1.getMethodType().equals(mhi2.getMethodType()) &&
-                   mhi1.getReferenceKind() == mhi2.getReferenceKind();
+        @Override
+        public String toString() {
+            return Arrays.toString(parts);
         }
     }
 
@@ -270,11 +392,13 @@ import java.security.PrivilegedAction;
      */
     private Class<?> spinInnerClass() throws LambdaConversionException {
         String samName = samBase.getName().replace('.', '/');
+        String lambdaClassName = lambdaClassNamePrefix + "$" + counter.incrementAndGet();
         String[] interfaces = new String[markerInterfaces.length + 1];
         interfaces[0] = samName;
         for (int i=0; i<markerInterfaces.length; i++) {
             interfaces[i+1] = markerInterfaces[i].getName().replace('.', '/');
         }
+
         cw.visit(CLASSFILE_VERSION, ACC_SUPER,
                  lambdaClassName, null,
                  NAME_MAGIC_ACCESSOR_IMPL, interfaces);
@@ -286,7 +410,7 @@ import java.security.PrivilegedAction;
             fv.visitEnd();
         }
 
-        generateConstructor();
+        generateConstructor(lambdaClassName);
 
         MethodAnalyzer ma = new MethodAnalyzer();
 
@@ -294,7 +418,7 @@ import java.security.PrivilegedAction;
         if (ma.getSamMethod() == null) {
             throw new LambdaConversionException(String.format("Functional interface method not found: %s", samMethodType));
         } else {
-            generateForwardingMethod(ma.getSamMethod(), false);
+            generateForwardingMethod(ma.getSamMethod(), false, lambdaClassName);
         }
 
         // Forward the bridges
@@ -303,12 +427,12 @@ import java.security.PrivilegedAction;
         // @@@ classfile attribute to request custom bridging.  See 8002092.
         if (!ma.getMethodsToBridge().isEmpty() /* && !ma.conflictFoundBetweenDefaultAndBridge() */ ) {
             for (Method m : ma.getMethodsToBridge()) {
-                generateForwardingMethod(m, true);
+                generateForwardingMethod(m, true, lambdaClassName);
             }
         }
 
         if (isSerializable) {
-            generateWriteReplace();
+            generateWriteReplace(lambdaClassName);
         }
 
         cw.visitEnd();
@@ -326,26 +450,27 @@ import java.security.PrivilegedAction;
             }
         ***/
 
-        ClassLoader loader = targetClass.getClassLoader();
-        ProtectionDomain pd = (loader == null)
+        ProtectionDomain pd = (lambdaClassLoader == null)
             ? null
             : AccessController.doPrivileged(
             new PrivilegedAction<ProtectionDomain>() {
                 @Override
                 public ProtectionDomain run() {
-                    return targetClass.getProtectionDomain();
+                    return lambdaProtectDomainClass.getProtectionDomain();
                 }
             }
         );
 
+        System.out.println(lambdaClassLoader + ": defining class: " + lambdaClassName);
+
         return (Class<?>) Unsafe.getUnsafe().defineClass(lambdaClassName, classBytes, 0, classBytes.length,
-                                                                   loader, pd);
+                                                                   lambdaClassLoader, pd);
     }
 
     /**
      * Generate the constructor for the class
      */
-    private void generateConstructor() {
+    private void generateConstructor(String lambdaClassName) {
         // Generate constructor
         MethodVisitor ctor = cw.visitMethod(ACC_PRIVATE, NAME_CTOR, constructorDesc, null, null);
         ctor.visitCode();
@@ -366,7 +491,7 @@ import java.security.PrivilegedAction;
     /**
      * Generate the writeReplace method (if needed for serialization)
      */
-    private void generateWriteReplace() {
+    private void generateWriteReplace(String lambdaClassName) {
         TypeConvertingMethodAdapter mv
                 = new TypeConvertingMethodAdapter(cw.visitMethod(ACC_PRIVATE + ACC_FINAL,
                                                                  NAME_METHOD_WRITE_REPLACE, DESCR_METHOD_WRITE_REPLACE,
@@ -374,7 +499,7 @@ import java.security.PrivilegedAction;
 
         mv.visitCode();
         mv.visitTypeInsn(NEW, NAME_SERIALIZED_LAMBDA);
-        mv.visitInsn(DUP);;
+        mv.visitInsn(DUP);
         mv.visitLdcInsn(Type.getType(targetClass));
         mv.visitLdcInsn(samInfo.getReferenceKind());
         mv.visitLdcInsn(invokedType.returnType().getName().replace('.', '/'));
@@ -409,7 +534,7 @@ import java.security.PrivilegedAction;
      * @param m The method whose signature should be generated
      * @param isBridge True if this methods should be flagged as a bridge
      */
-    private void generateForwardingMethod(Method m, boolean isBridge) {
+    private void generateForwardingMethod(Method m, boolean isBridge, String lambdaClassName) {
         Class<?>[] exceptionTypes = m.getExceptionTypes();
         String[] exceptionNames = new String[exceptionTypes.length];
         for (int i = 0; i < exceptionTypes.length; i++) {
@@ -418,7 +543,7 @@ import java.security.PrivilegedAction;
         String methodDescriptor = Type.getMethodDescriptor(m);
         int access = isBridge? ACC_PUBLIC | ACC_BRIDGE : ACC_PUBLIC;
         MethodVisitor mv = cw.visitMethod(access, m.getName(), methodDescriptor, null, exceptionNames);
-        new ForwardingMethodGenerator(mv).generate(m);
+        new ForwardingMethodGenerator(mv, lambdaClassName).generate(m);
     }
 
     /**
@@ -427,8 +552,11 @@ import java.security.PrivilegedAction;
      */
     private class ForwardingMethodGenerator extends TypeConvertingMethodAdapter {
 
-        ForwardingMethodGenerator(MethodVisitor mv) {
+        private final String lambdaClassName;
+
+        ForwardingMethodGenerator(MethodVisitor mv, String lambdaClassName) {
             super(mv);
+            this.lambdaClassName = lambdaClassName;
         }
 
         void generate(Method m) throws InternalError {

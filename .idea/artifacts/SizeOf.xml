@@ -1,0 +1,11 @@
+<component name="ArtifactManager">
+  <artifact type="jar" build-on-make="true" name="SizeOf">
+    <output-path>$PROJECT_DIR$/out/artifacts/SizeOf</output-path>
+    <root id="archive" name="jdk-test.jar">
+      <element id="module-output" name="micro-bench" />
+      <element id="directory" name="META-INF">
+        <element id="file-copy" path="$PROJECT_DIR$/../micro-bench/META-INF/MANIFEST.MF" />
+      </element>
+    </root>
+  </artifact>
+</component>
