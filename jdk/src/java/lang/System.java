@@ -1221,9 +1221,6 @@ public final class System {
             public StackTraceElement getStackTraceElement(Throwable t, int i) {
                 return t.getStackTraceElement(i);
             }
-            public ConcurrentMap<Object, Object> getPrivateMap(Class<?> klass) {
-                return klass.getPrivateMap();
-            }
             public ConcurrentMap<Object, Object> getPrivateMap(ClassLoader loader) {
                 return loader == null ? ClassLoader.getBootstrapPrivateMap() : loader.getPrivateMap();
             }

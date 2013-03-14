@@ -100,11 +100,6 @@ public interface JavaLangAccess {
     StackTraceElement getStackTraceElement(Throwable t, int i);
 
     /**
-     * Returns backing store for various platform-private values pertaining to j.l.Class instances.
-     */
-    ConcurrentMap<Object, Object> getPrivateMap(Class<?> clazz);
-
-    /**
      * Returns backing store for various platform-private values pertaining to j.l.ClassLoader instances.
      */
     ConcurrentMap<Object, Object> getPrivateMap(ClassLoader loader);
