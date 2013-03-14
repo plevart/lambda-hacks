@@ -169,7 +169,7 @@ import java.security.PrivilegedAction;
     }
 
     private boolean canDefineLambdaWithClassLoader(ClassLoader classLoader) {
-        return
+        boolean can =
                 isClassVisibleByClassLoader(samBase, classLoader) &&
                 isClassVisibleByClassLoader(implDefiningClass, classLoader) &&
                 areClassesVisibleByClassLoader(markerInterfaces, classLoader) &&
@@ -177,6 +177,16 @@ import java.security.PrivilegedAction;
                 areClassesVisibleByClassLoader(invokedType.ptypes(), classLoader) &&
                 isClassVisibleByClassLoader(instantiatedMethodType.rtype(), classLoader) &&
                 areClassesVisibleByClassLoader(instantiatedMethodType.ptypes(), classLoader);
+
+//        System.out.println("canDefineLambdaWithClassLoader: " + classLoader + " {");
+//        System.out.println("                 samBase: " + samBase);
+//        System.out.println("       implDefiningClass: " + implDefiningClass);
+//        System.out.println("        markerInterfaces: " + markerInterfaces);
+//        System.out.println("             invokedType: " + invokedType);
+//        System.out.println("  instantiatedMethodType: " + instantiatedMethodType);
+//        System.out.println("} -> " + can);
+
+        return can;
     }
 
     private boolean areClassesVisibleByClassLoader(Class<?>[] klasses, ClassLoader classLoader) {
@@ -189,6 +199,12 @@ import java.security.PrivilegedAction;
     }
 
     private boolean isClassVisibleByClassLoader(Class<?> klass, ClassLoader classLoader) {
+        boolean visible = isVisible0(klass, classLoader);
+//        System.out.println("is " + klass.getName() + " (loaded by " + klass.getClassLoader() + ") visible by " + classLoader + ": " + visible);
+        return visible;
+    }
+
+    private boolean isVisible0(Class<?> klass, ClassLoader classLoader) {
         if (klass.isPrimitive()) {
             return true;
         }
@@ -442,6 +458,8 @@ import java.security.PrivilegedAction;
                 }
             }
         );
+
+        System.out.println(lambdaClassLoader + ": defining class: " + lambdaClassName);
 
         return (Class<?>) Unsafe.getUnsafe().defineClass(lambdaClassName, classBytes, 0, classBytes.length,
                                                                    lambdaClassLoader, pd);

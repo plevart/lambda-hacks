@@ -6,6 +6,7 @@
 package test;
 
 import sun.misc.IOUtils;
+import sun.reflect.Reflection;
 
 import java.io.ByteArrayInputStream;
 import java.io.ByteArrayOutputStream;
@@ -13,10 +14,8 @@ import java.io.IOException;
 import java.io.InputStream;
 import java.io.ObjectInputStream;
 import java.io.ObjectOutputStream;
-import java.io.Serializable;
+import java.io.ObjectStreamClass;
 import java.lang.reflect.Field;
-
-import static test.LambdaTest.*;
 
 public class LambdaTest {
 
@@ -34,7 +33,7 @@ public class LambdaTest {
         modZ.run();
     }
 
-    static void dump(Object bean) {
+    public static void dump(Object bean) {
         System.out.println("\n" + bean + " {");
         for (Field f : bean.getClass().getDeclaredFields()) {
             try {
@@ -53,7 +52,7 @@ public class LambdaTest {
         System.out.println("}");
     }
 
-    static byte[] serialize(Object o) {
+    public static byte[] serialize(Object o) {
         ByteArrayOutputStream baos;
         try (
             ObjectOutputStream oos =
@@ -67,12 +66,27 @@ public class LambdaTest {
         return baos.toByteArray();
     }
 
-    static <T> T deserialize(byte[] bytes) {
+    public static <T> T deserialize(byte[] bytes) {
+        final ClassLoader callerLoader = Reflection.getCallerClass(2).getClassLoader();
         try (
             ObjectInputStream ois =
-                new ObjectInputStream(new ByteArrayInputStream(bytes))
+                new ObjectInputStream(new ByteArrayInputStream(bytes)) {
+                    @Override
+                    protected Class<?> resolveClass(ObjectStreamClass desc)
+                        throws IOException, ClassNotFoundException {
+                        String name = desc.getName();
+                        try {
+                            return Class.forName(name, false, callerLoader);
+                        }
+                        catch (ClassNotFoundException ex) {
+                            return super.resolveClass(desc);
+                        }
+                    }
+                }
         ) {
-            return (T) ois.readObject();
+            T res = (T) ois.readObject();
+            System.out.println("deserialized: " + res + " loaded with: " + res.getClass().getClassLoader());
+            return res;
         }
         catch (IOException | ClassNotFoundException e) {
             throw new RuntimeException(e);
@@ -91,7 +105,7 @@ public class LambdaTest {
 
         @Override
         protected Class<?> loadClass(String name, boolean resolve) throws ClassNotFoundException {
-            System.out.println(this + ": loading " + name);
+            System.out.println(this + ": initiated loading " + name);
 
             if (name.startsWith(moduleName)) {
                 return loadModuleClass(name, resolve);
@@ -111,6 +125,9 @@ public class LambdaTest {
         }
 
         private Class<?> loadModuleClass(String name, boolean resolve) throws ClassNotFoundException {
+            if (!name.startsWith(moduleName)) {
+                throw new ClassNotFoundException(name);
+            }
             synchronized (getClassLoadingLock(name)) {
                 Class<?> c = findLoadedClass(name);
                 if (c == null) {
@@ -143,51 +160,5 @@ public class LambdaTest {
         public String toString() {
             return "ModuleLoader[" + moduleName + "]";
         }
-    }
-}
-
-class ModX {
-
-    interface BinOp {
-        int apply(int a, int b);
-    }
-
-    static int min(int a, int b) {
-        return a <= b ? a : b;
-    }
-}
-
-class ModY {
-
-    interface BinOp {
-        int apply(int a, int b);
-    }
-
-    static int min(int a, int b) {
-        return a <= b ? a : b;
-    }
-}
-
-class ModZ implements Runnable {
-
-    ModX.BinOp methRefXX = ModX::min;
-    ModX.BinOp serMethRefXX = (ModX.BinOp & Serializable) ModX::min;
-    ModX.BinOp deserMethRefXX = deserialize(serialize(serMethRefXX));
-
-    ModY.BinOp methRefYX = ModX::min;
-    ModY.BinOp serMethRefYX = (ModY.BinOp & Serializable) ModX::min;
-    ModY.BinOp deserMethRefYX = deserialize(serialize(serMethRefYX));
-
-    ModX.BinOp methRefXY = ModY::min;
-    ModX.BinOp serMethRefXY = (ModX.BinOp & Serializable) ModY::min;
-    ModX.BinOp deserMethRefXY = deserialize(serialize(serMethRefXY));
-
-    ModX.BinOp lambdaX = (a, b) -> a <= b ? a : b;
-    ModX.BinOp serLambdaX = (ModX.BinOp & Serializable) (a, b) -> a <= b ? a : b;
-    ModX.BinOp deserLambdaX = deserialize(serialize(serLambdaX));
-
-    @Override
-    public void run() {
-        dump(this);
     }
 }
