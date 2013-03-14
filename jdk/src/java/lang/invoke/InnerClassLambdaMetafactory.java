@@ -133,7 +133,8 @@ import java.security.PrivilegedAction;
             ) {
             lambdaClassLoader = classLoader;
             lambdaProtectDomainClass = implDefiningClass;
-            lambdaClassNamePrefix = samBase.getName().replace('.', '/') + "$$Lambda" +
+            lambdaClassNamePrefix = implDefiningClass.getName().replace('.', '/') +
+                                    "$$Lambda" +
                                     getImplMethodNameSuffix();
         } else if (
             !isSerializable &&
@@ -144,7 +145,8 @@ import java.security.PrivilegedAction;
             ) {
             lambdaClassLoader = classLoader;
             lambdaProtectDomainClass = samBase;
-            lambdaClassNamePrefix = samBase.getName().replace('.', '/') + "$$Lambda" +
+            lambdaClassNamePrefix = samBase.getName().replace('.', '/') +
+                                    "$$Lambda" +
                                     getImplMethodNameSuffix();
         } else {
             lambdaClassLoader = targetClass.getClassLoader();
@@ -165,7 +167,7 @@ import java.security.PrivilegedAction;
     private String getImplMethodNameSuffix() {
         return implMethodName.startsWith("lambda$")
            ? ""
-           : "$" + implDefiningClass.getSimpleName() + "$" + implMethodName;
+           : "$" + implMethodName;
     }
 
     private boolean canDefineLambdaWithClassLoader(ClassLoader classLoader) {

@@ -20,17 +20,18 @@ import java.lang.reflect.Field;
 public class LambdaTest {
 
     public static void main(String[] args) throws Exception {
+        // "system" class-loader
         ClassLoader system = LambdaTest.class.getClassLoader();
         // module X has no dependencies (only system classes)
-        ModuleLoader loaderX = new ModuleLoader(system, new ModuleLoader[0], "test.ModX");
+        ModuleLoader loaderX = new ModuleLoader(system, new ModuleLoader[0], "test.x");
         // module Y has no dependencies (only system classes)
-        ModuleLoader loaderY = new ModuleLoader(system, new ModuleLoader[0], "test.ModY");
+        ModuleLoader loaderY = new ModuleLoader(system, new ModuleLoader[0], "test.y");
         // module Z depends on X and Y (and system classes)
-        ModuleLoader loaderZ = new ModuleLoader(system, new ModuleLoader[]{loaderX, loaderY}, "test.ModZ");
+        ModuleLoader loaderZ = new ModuleLoader(system, new ModuleLoader[]{loaderX, loaderY}, "test.z");
 
-        Class<?> modZclass = loaderZ.loadClass("test.ModZ");
-        Runnable modZ = (Runnable) modZclass.newInstance();
-        modZ.run();
+        Class<?> testAppClass = loaderZ.loadClass("test.z.TestApp");
+        Runnable testApp = (Runnable) testAppClass.newInstance();
+        testApp.run();
     }
 
     public static void dump(Object bean) {
@@ -39,7 +40,8 @@ public class LambdaTest {
             try {
                 Object lambda = f.get(bean);
                 System.out.printf(
-                    "%20s: %-64s (%s)\n",
+                    "  %40s %20s = %-50s // %s\n",
+                    f.getType().getName(),
                     f.getName(),
                     String.valueOf(lambda),
                     String.valueOf(lambda.getClass().getClassLoader())
@@ -85,7 +87,7 @@ public class LambdaTest {
                 }
         ) {
             T res = (T) ois.readObject();
-            System.out.println("deserialized: " + res + " loaded with: " + res.getClass().getClassLoader());
+            System.out.println("deserialized: " + res + " loaded with: " + res.getClass().getClassLoader() + " latestUserDefinedLoader would be: " + sun.misc.VM.latestUserDefinedLoader());
             return res;
         }
         catch (IOException | ClassNotFoundException e) {

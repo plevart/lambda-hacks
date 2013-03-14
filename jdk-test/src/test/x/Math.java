@@ -3,17 +3,12 @@
  * and released to the public domain, as explained at
  * http://creativecommons.org/publicdomain/zero/1.0/
  */
-package test;
+package test.x;
 
 /**
  * @author peter
  */
-public class ModX {
-
-    public interface BinOp {
-        int apply(int a, int b);
-    }
-
+public class Math {
     public static int min(int a, int b) {
         return a <= b ? a : b;
     }
