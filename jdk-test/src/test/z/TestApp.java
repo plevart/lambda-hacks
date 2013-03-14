@@ -5,6 +5,8 @@
  */
 package test.z;
 
+import test.x.Complex;
+
 import java.io.ByteArrayInputStream;
 import java.io.ByteArrayOutputStream;
 import java.io.IOException;
@@ -12,6 +14,10 @@ import java.io.ObjectInputStream;
 import java.io.ObjectOutputStream;
 import java.io.Serializable;
 import java.lang.reflect.Field;
+import java.util.Arrays;
+import java.util.List;
+import java.util.function.Function;
+import java.util.function.Functions;
 import java.util.function.IntBinaryOperator;
 
 
@@ -39,6 +45,8 @@ public class TestApp implements Runnable {
     public IntBinaryOperator samS_methodS = java.lang.Math::min;
     public IntBinaryOperator samS_methodX = test.x.Math::min;
     public test.x.BinOp samX_methodS = java.lang.Math::min;
+
+    public Function<Complex, List<Complex>> complexToList = Arrays::asList;
 
     @Override
     public void run() {
