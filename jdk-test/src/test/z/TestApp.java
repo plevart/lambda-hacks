@@ -85,8 +85,7 @@ public class TestApp implements Runnable {
                 new ObjectInputStream(new ByteArrayInputStream(bytes))
         ) {
             T res = (T) ois.readObject();
-            System.out.println("deserialized: " + res + " loaded with: " + res.getClass().getClassLoader()
-                               + " latestUserDefinedLoader would be: " + sun.misc.VM.latestUserDefinedLoader());
+            System.out.println(res.getClass().getClassLoader() + ": deserialized: " + res);
             return res;
         }
         catch (IOException | ClassNotFoundException e) {

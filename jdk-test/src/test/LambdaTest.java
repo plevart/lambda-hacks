@@ -28,20 +28,20 @@ public class LambdaTest {
     }
 
     static class ModuleLoader extends ClassLoader {
-        private final String moduleName;
+        private final String moduleName, packagePrefix;
         private final ModuleLoader[] dependencies;
 
         ModuleLoader(ClassLoader parent, ModuleLoader[] dependencies, String moduleName) {
             super(parent);
             this.dependencies = dependencies;
             this.moduleName = moduleName;
+            this.packagePrefix = moduleName + '.';
         }
 
         @Override
         protected Class<?> loadClass(String name, boolean resolve) throws ClassNotFoundException {
-            System.out.println(this + ": initiated loading " + name);
-
-            if (name.startsWith(moduleName)) {
+//            System.out.println(this + ": initiated loading " + name);
+            if (name.startsWith(packagePrefix)) {
                 return loadModuleClass(name, resolve);
             } else {
                 // not our class, 1st delegate to dependencies
@@ -59,7 +59,7 @@ public class LambdaTest {
         }
 
         private Class<?> loadModuleClass(String name, boolean resolve) throws ClassNotFoundException {
-            if (!name.startsWith(moduleName)) {
+            if (!name.startsWith(packagePrefix)) {
                 throw new ClassNotFoundException(name);
             }
             synchronized (getClassLoadingLock(name)) {
