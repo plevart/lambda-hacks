@@ -28,7 +28,7 @@ public class LambdaTest {
         // module Z depends on X and Y (and system classes)
         ModuleLoader loaderZ = new ModuleLoader(system, new ModuleLoader[]{loaderX, loaderY}, "test.ModZ");
 
-        Class<?> modZclass = loaderZ.loadClass("test.ModZ", false);
+        Class<?> modZclass = loaderZ.loadClass("test.ModZ");
         Runnable modZ = (Runnable) modZclass.newInstance();
         modZ.run();
     }
