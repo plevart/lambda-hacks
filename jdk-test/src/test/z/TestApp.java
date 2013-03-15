@@ -6,6 +6,7 @@
 package test.z;
 
 import test.x.Complex;
+import test.sys.Methods;
 
 import java.io.ByteArrayInputStream;
 import java.io.ByteArrayOutputStream;
@@ -17,7 +18,6 @@ import java.lang.reflect.Field;
 import java.util.Arrays;
 import java.util.List;
 import java.util.function.Function;
-import java.util.function.Functions;
 import java.util.function.IntBinaryOperator;
 
 
@@ -46,7 +46,10 @@ public class TestApp implements Runnable {
     public IntBinaryOperator samS_methodX = test.x.Math::min;
     public test.x.BinOp samX_methodS = java.lang.Math::min;
 
-    public Function<Complex, List<Complex>> complexToList = Arrays::asList;
+    public Function<Complex, List<Complex>> complexToList1 = Arrays::asList;
+    public Function<Complex, List<Complex>> complexToList2 = Arrays::asList;
+
+    public Function<Complex, Complex> complexToComplex = Methods::identity;
 
     @Override
     public void run() {
