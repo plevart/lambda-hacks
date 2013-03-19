@@ -183,7 +183,7 @@ import java.security.PrivilegedAction;
         System.out.println("canDefineLambdaWithClassLoader: " + classLoader + " {");
         System.out.println("                 samBase: " + samBase);
         System.out.println("       implDefiningClass: " + implDefiningClass);
-        System.out.println("        markerInterfaces: " + markerInterfaces);
+        System.out.println("        markerInterfaces: " + Arrays.toString(markerInterfaces));
         System.out.println("             invokedType: " + invokedType);
         System.out.println("  instantiatedMethodType: " + instantiatedMethodType);
         System.out.println("} -> " + can);
@@ -463,8 +463,10 @@ import java.security.PrivilegedAction;
 
         System.out.println(lambdaClassLoader + ": defining class: " + lambdaClassName);
 
-        return (Class<?>) Unsafe.getUnsafe().defineClass(lambdaClassName, classBytes, 0, classBytes.length,
-                                                                   lambdaClassLoader, pd);
+        return Unsafe.getUnsafe().defineAnonymousClass(lambdaProtectDomainClass, classBytes, new Object[0]);
+
+//        return Unsafe.getUnsafe().defineClass(lambdaClassName, classBytes, 0, classBytes.length,
+//                                                                   lambdaClassLoader, pd);
     }
 
     /**

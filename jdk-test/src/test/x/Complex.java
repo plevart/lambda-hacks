@@ -13,4 +13,9 @@ public final class Complex {
     public Complex add(Complex c) {
         return new Complex(re + c.re, im + c.im);
     }
+
+    @Override
+    public String toString() {
+        return re + " + " + im + " * i";
+    }
 }

@@ -54,6 +54,12 @@ public class TestApp implements Runnable {
     @Override
     public void run() {
         dump(this);
+
+        System.out.println(samX_methodX.apply(1, 2));
+        System.out.println(ser_samX_methodX.apply(1, 2));
+        System.out.println(deser_samX_methodX.apply(1, 2));
+
+        System.out.println(complexToComplex.apply(new Complex(0d, 1d)));
     }
 
     static void dump(Object bean) {
