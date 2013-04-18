@@ -24,7 +24,12 @@
  */
 package java.util.stream;
 
-import java.util.*;
+import java.util.ArrayList;
+import java.util.Arrays;
+import java.util.Iterator;
+import java.util.List;
+import java.util.PrimitiveIterator;
+import java.util.Spliterator;
 import java.util.Spliterators;
 import java.util.function.Consumer;
 import java.util.function.DoubleConsumer;
@@ -34,36 +39,46 @@ import java.util.function.LongConsumer;
 
 /**
  * An ordered collection of elements.  Elements can be added, but not removed.
- * <p>
- * One or more arrays are used to store elements.
- * The use of a multiple arrays has better performance characteristics than a single array used by {@link ArrayList}
- * when the capacity of the list needs to be increased as no copying of elements is required.
- * The trade-off is the elements may be fragmented over two or more arrays. However, for the purposes
- * of adding elements, iterating and splitting this trade-off is acceptable.
+ * Goes through a building phase, during which elements can be added, and a
+ * traversal phase, during which elements can be traversed in order but no
+ * further modifications are possible.
+ *
+ * <p> One or more arrays are used to store elements. The use of a multiple
+ * arrays has better performance characteristics than a single array used by
+ * {@link ArrayList}, as when the capacity of the list needs to be increased
+ * no copying of elements is required.  This is usually beneficial in the case
+ * where the results will be traversed a small number of times.
  * </p>
  *
  * @param <E> the type of elements in this list
  * @since 1.8
  */
-class SpinedBuffer<E> extends AbstractSpinedBuffer<E> implements Consumer<E>, Iterable<E> {
+class SpinedBuffer<E>
+        extends AbstractSpinedBuffer
+        implements Consumer<E>, Iterable<E> {
 
     /*
-     * We optimistically hope that all the data will fit into the first chunk, so we try to avoid
-     * inflating the spine[] and priorElementCount[] arrays prematurely.  So methods must be prepared
-     * to deal with these arrays being null.  If spine is non-null, then spineIndex points to the current
-     * chunk within the spine, otherwise it is zero.  The spine and priorElementCount arrays are always
-     * the same size, and for any i <= spineIndex, priorElementCount[i] is the sum of the sizes of all
-     * the prior chunks.
+     * We optimistically hope that all the data will fit into the first chunk,
+     * so we try to avoid inflating the spine[] and priorElementCount[] arrays
+     * prematurely.  So methods must be prepared to deal with these arrays being
+     * null.  If spine is non-null, then spineIndex points to the current chunk
+     * within the spine, otherwise it is zero.  The spine and priorElementCount
+     * arrays are always the same size, and for any i <= spineIndex,
+     * priorElementCount[i] is the sum of the sizes of all the prior chunks.
      *
-     * The curChunk pointer is always valid.  The elementIndex is the index of the next element to be
-     * written in curChunk; this may be past the end of curChunk so we have to check before writing.
-     * When we inflate the spine array, curChunk becomes the first element in it.  When we clear the
-     * buffer, we discard all chunks except the first one, which we clear, restoring it to the initial
-     * single-chunk state.
+     * The curChunk pointer is always valid.  The elementIndex is the index of
+     * the next element to be written in curChunk; this may be past the end of
+     * curChunk so we have to check before writing. When we inflate the spine
+     * array, curChunk becomes the first element in it.  When we clear the
+     * buffer, we discard all chunks except the first one, which we clear,
+     * restoring it to the initial single-chunk state.
      *
      */
 
-    /** Chunk that we're currently writing into; may be aliased with an element of the spine, or not */
+    /**
+     * Chunk that we're currently writing into; may or may not be aliased with
+     * the first element of the spine
+     */
     protected E[] curChunk;
 
     /** All chunks, or null if there is only one chunk */
@@ -87,25 +102,6 @@ class SpinedBuffer<E> extends AbstractSpinedBuffer<E> implements Consumer<E>, It
     SpinedBuffer() {
         super();
         curChunk = (E[]) new Object[1 << initialChunkPower];
-    }
-
-    /**
-     * Constructs a list containing the elements of the specified
-     * iterable, in the order they are returned by the iterables's
-     * iterator.
-     *
-     * @param i the iterable whose elements are to be placed into this list
-     * @throws NullPointerException if the specified iterable is null
-     */
-    SpinedBuffer(Iterable<E> i) {
-        this();
-
-        // @@@ This can be more efficient if c.toArray() is used
-        i.forEach(this);
-
-        // @@@ Note for testing purposes we need to simulate the contents as if
-        //     elements are added individually, if this method is modified check usage in tests and
-        //     as data source
     }
 
     /** Returns the current capacity of the buffer */
@@ -149,7 +145,8 @@ class SpinedBuffer<E> extends AbstractSpinedBuffer<E> implements Consumer<E>, It
 
     /** Retrieve the element at the specified index */
     public E get(long index) {
-        // @@@ can further optimize by caching last seen spineIndex, which is going to be right most of the time
+        // @@@ can further optimize by caching last seen spineIndex,
+        // which is going to be right most of the time
         if (spineIndex == 0) {
             if (index < elementIndex)
                 return curChunk[((int) index)];
@@ -411,7 +408,8 @@ class SpinedBuffer<E> extends AbstractSpinedBuffer<E> implements Consumer<E>, It
 
             @Override
             public boolean tryAdvance(Consumer<? super E> consumer) {
-                if (splSpineIndex < spineIndex || (splSpineIndex == spineIndex && splElementIndex < elementIndex)) {
+                if (splSpineIndex < spineIndex
+                    || (splSpineIndex == spineIndex && splElementIndex < elementIndex)) {
                     consumer.accept(splChunk[splElementIndex++]);
 
                     if (splElementIndex == splChunk.length) {
@@ -427,7 +425,8 @@ class SpinedBuffer<E> extends AbstractSpinedBuffer<E> implements Consumer<E>, It
 
             @Override
             public void forEachRemaining(Consumer<? super E> consumer) {
-                if (splSpineIndex < spineIndex || (splSpineIndex == spineIndex && splElementIndex < elementIndex)) {
+                if (splSpineIndex < spineIndex
+                    || (splSpineIndex == spineIndex && splElementIndex < elementIndex)) {
                     int i = splElementIndex;
                     // completed chunks, if any
                     for (int sp = splSpineIndex; sp < spineIndex; sp++) {
@@ -453,8 +452,10 @@ class SpinedBuffer<E> extends AbstractSpinedBuffer<E> implements Consumer<E>, It
             @Override
             public Spliterator<E> trySplit() {
                 if (splSpineIndex < spineIndex) {
-                    Spliterator<E> ret = Arrays.spliterator(spine[splSpineIndex], 0, spine[splSpineIndex].length);
+                    Spliterator<E> ret = Arrays.spliterator(spine[splSpineIndex],
+                                                            splElementIndex, spine[splSpineIndex].length);
                     splChunk = spine[++splSpineIndex];
+                    splElementIndex = 0;
                     return ret;
                 }
                 else if (splSpineIndex == spineIndex) {
@@ -475,44 +476,46 @@ class SpinedBuffer<E> extends AbstractSpinedBuffer<E> implements Consumer<E>, It
     }
 
     /**
-     * An ordered collection of primitive values.
-     * Values can be added, no values can be removed.
-     * <p>
-     * One or more arrays are used to store values.
-     * The use of a multiple arrays has better performance characteristics than a single array used by {@link ArrayList}
-     * when the capacity of the list needs to be increased. No copying of arrays of values is required.
-     * The trade-off is the values may be fragmented over two or more arrays. However, for the purposes
-     * of adding values, iterating and splitting this trade-off is acceptable.
-     * </p>
+     * An ordered collection of primitive values.  Elements can be added, but
+     * not removed. Goes through a building phase, during which elements can be
+     * added, and a traversal phase, during which elements can be traversed in
+     * order but no further modifications are possible.
      *
-     * @param <E> the type of primitive value.
-     * @param <A> the type primitive array of values.
-     * @param <C> the type of primitive consumer.
+     * <p> One or more arrays are used to store elements. The use of a multiple
+     * arrays has better performance characteristics than a single array used by
+     * {@link ArrayList}, as when the capacity of the list needs to be increased
+     * no copying of elements is required.  This is usually beneficial in the case
+     * where the results will be traversed a small number of times.
+     *
+     * @param <E> the wrapper type for this primitive type
+     * @param <T_ARR> the array type for this primitive type
+     * @param <T_CONS> the Consumer type for this primitive type
      */
-    abstract static class OfPrimitive<E, A, C>
-            extends AbstractSpinedBuffer<E> implements Iterable<E> {
+    abstract static class OfPrimitive<E, T_ARR, T_CONS>
+            extends AbstractSpinedBuffer implements Iterable<E> {
 
         /*
-         * We optimistically hope that all the data will fit into the first chunk, so we try to avoid
-         * inflating the spine[] and priorElementCount[] arrays prematurely.  So methods must be prepared
-         * to deal with these arrays being null.  If spine is non-null, then spineIndex points to the current
-         * chunk within the spine, otherwise it is zero.  The spine and priorElementCount arrays are always
-         * the same size, and for any i <= spineIndex, priorElementCount[i] is the sum of the sizes of all
-         * the prior chunks.
+         * We optimistically hope that all the data will fit into the first chunk,
+         * so we try to avoid inflating the spine[] and priorElementCount[] arrays
+         * prematurely.  So methods must be prepared to deal with these arrays being
+         * null.  If spine is non-null, then spineIndex points to the current chunk
+         * within the spine, otherwise it is zero.  The spine and priorElementCount
+         * arrays are always the same size, and for any i <= spineIndex,
+         * priorElementCount[i] is the sum of the sizes of all the prior chunks.
          *
-         * The curChunk pointer is always valid.  The elementIndex is the index of the next element to be
-         * written in curChunk; this may be past the end of curChunk so we have to check before writing.
-         * When we inflate the spine array, curChunk becomes the first element in it.  When we clear the
-         * buffer, we discard all chunks except the first one, which we clear, restoring it to the initial
-         * single-chunk state.
-         *
+         * The curChunk pointer is always valid.  The elementIndex is the index of
+         * the next element to be written in curChunk; this may be past the end of
+         * curChunk so we have to check before writing. When we inflate the spine
+         * array, curChunk becomes the first element in it.  When we clear the
+         * buffer, we discard all chunks except the first one, which we clear,
+         * restoring it to the initial single-chunk state.
          */
 
         // The chunk we're currently writing into
-        A curChunk;
+        T_ARR curChunk;
 
         // All chunks, or null if there is only one chunk
-        A[] spine;
+        T_ARR[] spine;
 
         /**
          * Constructs an empty list with the specified initial capacity.
@@ -540,11 +543,18 @@ class SpinedBuffer<E> extends AbstractSpinedBuffer<E> implements Consumer<E>, It
         @Override
         public abstract void forEach(Consumer<? super E> consumer);
 
+        /** Create a new array-of-array of the proper type and size */
+        protected abstract T_ARR[] newArrayArray(int size);
 
-        protected abstract A[] newArrayArray(int size);
-        protected abstract A newArray(int size);
-        protected abstract int arrayLength(A array);
-        protected abstract void arrayForEach(A array, int from, int to, C consumer);
+        /** Create a new array of the proper type and size */
+        protected abstract T_ARR newArray(int size);
+
+        /** Get the length of an array */
+        protected abstract int arrayLength(T_ARR array);
+
+        /** Iterate an array with the provided consumer */
+        protected abstract void arrayForEach(T_ARR array, int from, int to,
+                                             T_CONS consumer);
 
         protected long capacity() {
             return (spineIndex == 0)
@@ -600,7 +610,7 @@ class SpinedBuffer<E> extends AbstractSpinedBuffer<E> implements Consumer<E>, It
             throw new IndexOutOfBoundsException(Long.toString(index));
         }
 
-        public void copyInto(A array, int offset) {
+        public void copyInto(T_ARR array, int offset) {
             long finalOffset = offset + count();
             if (finalOffset > arrayLength(array) || finalOffset < offset) {
                 throw new IndexOutOfBoundsException("does not fit");
@@ -619,9 +629,9 @@ class SpinedBuffer<E> extends AbstractSpinedBuffer<E> implements Consumer<E>, It
             }
         }
 
-        public A asPrimitiveArray() {
+        public T_ARR asPrimitiveArray() {
             // @@@ will fail for size == MAX_VALUE
-            A result = newArray((int) count());
+            T_ARR result = newArray((int) count());
             copyInto(result, 0);
             return result;
         }
@@ -647,7 +657,7 @@ class SpinedBuffer<E> extends AbstractSpinedBuffer<E> implements Consumer<E>, It
             spineIndex = 0;
         }
 
-        public void forEach(C consumer) {
+        public void forEach(T_CONS consumer) {
             // completed chunks, if any
             for (int j = 0; j < spineIndex; j++)
                 arrayForEach(spine[j], 0, arrayLength(spine[j]), consumer);
@@ -656,7 +666,8 @@ class SpinedBuffer<E> extends AbstractSpinedBuffer<E> implements Consumer<E>, It
             arrayForEach(curChunk, 0, elementIndex, consumer);
         }
 
-        abstract class BaseSpliterator<T_SPLITER extends Spliterator<E>> implements Spliterator<E> {
+        abstract class BaseSpliterator<T_SPLITER extends Spliterator<E>>
+                implements Spliterator<E> {
             // The current spine index
             int splSpineIndex;
 
@@ -668,11 +679,11 @@ class SpinedBuffer<E> extends AbstractSpinedBuffer<E> implements Consumer<E>, It
             // tryAdvance can set splSpineIndex > spineIndex if the last spine is full
 
             // The current spine array
-            A splChunk = (spine == null) ? curChunk : spine[0];
+            T_ARR splChunk = (spine == null) ? curChunk : spine[0];
 
-            abstract void arrayForOne(A array, int index, C consumer);
+            abstract void arrayForOne(T_ARR array, int index, T_CONS consumer);
 
-            abstract T_SPLITER arraySpliterator(A array, int offset, int len);
+            abstract T_SPLITER arraySpliterator(T_ARR array, int offset, int len);
 
             @Override
             public long estimateSize() {
@@ -686,8 +697,9 @@ class SpinedBuffer<E> extends AbstractSpinedBuffer<E> implements Consumer<E>, It
                 return SPLITERATOR_CHARACTERISTICS;
             }
 
-            public boolean tryAdvance(C consumer) {
-                if (splSpineIndex < spineIndex || (splSpineIndex == spineIndex && splElementIndex < elementIndex)) {
+            public boolean tryAdvance(T_CONS consumer) {
+                if (splSpineIndex < spineIndex
+                    || (splSpineIndex == spineIndex && splElementIndex < elementIndex)) {
                     arrayForOne(splChunk, splElementIndex++, consumer);
 
                     if (splElementIndex == arrayLength(splChunk)) {
@@ -701,12 +713,13 @@ class SpinedBuffer<E> extends AbstractSpinedBuffer<E> implements Consumer<E>, It
                 return false;
             }
 
-            public void forEachRemaining(C consumer) {
-                if (splSpineIndex < spineIndex || (splSpineIndex == spineIndex && splElementIndex < elementIndex)) {
+            public void forEachRemaining(T_CONS consumer) {
+                if (splSpineIndex < spineIndex
+                    || (splSpineIndex == spineIndex && splElementIndex < elementIndex)) {
                     int i = splElementIndex;
                     // completed chunks, if any
                     for (int sp = splSpineIndex; sp < spineIndex; sp++) {
-                        A chunk = spine[sp];
+                        T_ARR chunk = spine[sp];
                         arrayForEach(chunk, i, arrayLength(chunk), consumer);
                         i = 0;
                     }
@@ -721,8 +734,10 @@ class SpinedBuffer<E> extends AbstractSpinedBuffer<E> implements Consumer<E>, It
             @Override
             public T_SPLITER trySplit() {
                 if (splSpineIndex < spineIndex) {
-                    T_SPLITER ret = arraySpliterator(spine[splSpineIndex], 0, arrayLength(spine[splSpineIndex]));
+                    T_SPLITER ret = arraySpliterator(spine[splSpineIndex], splElementIndex,
+                                                     arrayLength(spine[splSpineIndex]) - splElementIndex);
                     splChunk = spine[++splSpineIndex];
+                    splElementIndex = 0;
                     return ret;
                 }
                 else if (splSpineIndex == spineIndex) {
@@ -745,7 +760,8 @@ class SpinedBuffer<E> extends AbstractSpinedBuffer<E> implements Consumer<E>, It
     /**
      * An ordered collection of {@code int} values.
      */
-    static class OfInt extends SpinedBuffer.OfPrimitive<Integer, int[], IntConsumer> implements IntConsumer {
+    static class OfInt extends SpinedBuffer.OfPrimitive<Integer, int[], IntConsumer>
+            implements IntConsumer {
         OfInt() { }
 
         OfInt(int initialCapacity) {
@@ -780,7 +796,9 @@ class SpinedBuffer<E> extends AbstractSpinedBuffer<E> implements Consumer<E>, It
         }
 
         @Override
-        protected void arrayForEach(int[] array, int from, int to, IntConsumer consumer) {
+        protected void arrayForEach(int[] array,
+                                    int from, int to,
+                                    IntConsumer consumer) {
             for (int i = from; i < to; i++)
                 consumer.accept(array[i]);
         }
@@ -809,7 +827,8 @@ class SpinedBuffer<E> extends AbstractSpinedBuffer<E> implements Consumer<E>, It
         }
 
         public Spliterator.OfInt spliterator() {
-            class Splitr extends BaseSpliterator<Spliterator.OfInt> implements Spliterator.OfInt {
+            class Splitr extends BaseSpliterator<Spliterator.OfInt>
+                    implements Spliterator.OfInt {
 
                 @Override
                 void arrayForOne(int[] array, int index, IntConsumer consumer) {
@@ -828,12 +847,14 @@ class SpinedBuffer<E> extends AbstractSpinedBuffer<E> implements Consumer<E>, It
         public String toString() {
             int[] array = asIntArray();
             if (array.length < 200) {
-                return String.format("%s[length=%d, chunks=%d]%s", getClass().getSimpleName(), array.length,
+                return String.format("%s[length=%d, chunks=%d]%s",
+                                     getClass().getSimpleName(), array.length,
                                      spineIndex, Arrays.toString(array));
             }
             else {
                 int[] array2 = Arrays.copyOf(array, 200);
-                return String.format("%s[length=%d, chunks=%d]%s...", getClass().getSimpleName(), array.length,
+                return String.format("%s[length=%d, chunks=%d]%s...",
+                                     getClass().getSimpleName(), array.length,
                                      spineIndex, Arrays.toString(array2));
             }
         }
@@ -842,7 +863,8 @@ class SpinedBuffer<E> extends AbstractSpinedBuffer<E> implements Consumer<E>, It
     /**
      * An ordered collection of {@code long} values.
      */
-    static class OfLong extends SpinedBuffer.OfPrimitive<Long, long[], LongConsumer> implements LongConsumer {
+    static class OfLong extends SpinedBuffer.OfPrimitive<Long, long[], LongConsumer>
+            implements LongConsumer {
         OfLong() { }
 
         OfLong(int initialCapacity) {
@@ -877,7 +899,9 @@ class SpinedBuffer<E> extends AbstractSpinedBuffer<E> implements Consumer<E>, It
         }
 
         @Override
-        protected void arrayForEach(long[] array, int from, int to, LongConsumer consumer) {
+        protected void arrayForEach(long[] array,
+                                    int from, int to,
+                                    LongConsumer consumer) {
             for (int i = from; i < to; i++)
                 consumer.accept(array[i]);
         }
@@ -907,7 +931,8 @@ class SpinedBuffer<E> extends AbstractSpinedBuffer<E> implements Consumer<E>, It
 
 
         public Spliterator.OfLong spliterator() {
-            class Splitr extends BaseSpliterator<Spliterator.OfLong> implements Spliterator.OfLong {
+            class Splitr extends BaseSpliterator<Spliterator.OfLong>
+                    implements Spliterator.OfLong {
                 @Override
                 void arrayForOne(long[] array, int index, LongConsumer consumer) {
                     consumer.accept(array[index]);
@@ -925,12 +950,14 @@ class SpinedBuffer<E> extends AbstractSpinedBuffer<E> implements Consumer<E>, It
         public String toString() {
             long[] array = asLongArray();
             if (array.length < 200) {
-                return String.format("%s[length=%d, chunks=%d]%s", getClass().getSimpleName(), array.length,
+                return String.format("%s[length=%d, chunks=%d]%s",
+                                     getClass().getSimpleName(), array.length,
                                      spineIndex, Arrays.toString(array));
             }
             else {
                 long[] array2 = Arrays.copyOf(array, 200);
-                return String.format("%s[length=%d, chunks=%d]%s...", getClass().getSimpleName(), array.length,
+                return String.format("%s[length=%d, chunks=%d]%s...",
+                                     getClass().getSimpleName(), array.length,
                                      spineIndex, Arrays.toString(array2));
             }
         }
@@ -939,7 +966,9 @@ class SpinedBuffer<E> extends AbstractSpinedBuffer<E> implements Consumer<E>, It
     /**
      * An ordered collection of {@code double} values.
      */
-    static class OfDouble extends SpinedBuffer.OfPrimitive<Double, double[], DoubleConsumer> implements DoubleConsumer {
+    static class OfDouble
+            extends SpinedBuffer.OfPrimitive<Double, double[], DoubleConsumer>
+            implements DoubleConsumer {
         OfDouble() { }
 
         OfDouble(int initialCapacity) {
@@ -974,7 +1003,9 @@ class SpinedBuffer<E> extends AbstractSpinedBuffer<E> implements Consumer<E>, It
         }
 
         @Override
-        protected void arrayForEach(double[] array, int from, int to, DoubleConsumer consumer) {
+        protected void arrayForEach(double[] array,
+                                    int from, int to,
+                                    DoubleConsumer consumer) {
             for (int i = from; i < to; i++)
                 consumer.accept(array[i]);
         }
@@ -1003,7 +1034,8 @@ class SpinedBuffer<E> extends AbstractSpinedBuffer<E> implements Consumer<E>, It
         }
 
         public Spliterator.OfDouble spliterator() {
-            class Splitr extends BaseSpliterator<Spliterator.OfDouble> implements Spliterator.OfDouble {
+            class Splitr extends BaseSpliterator<Spliterator.OfDouble>
+                    implements Spliterator.OfDouble {
                 @Override
                 void arrayForOne(double[] array, int index, DoubleConsumer consumer) {
                     consumer.accept(array[index]);
@@ -1021,12 +1053,14 @@ class SpinedBuffer<E> extends AbstractSpinedBuffer<E> implements Consumer<E>, It
         public String toString() {
             double[] array = asDoubleArray();
             if (array.length < 200) {
-                return String.format("%s[length=%d, chunks=%d]%s", getClass().getSimpleName(), array.length,
+                return String.format("%s[length=%d, chunks=%d]%s",
+                                     getClass().getSimpleName(), array.length,
                                      spineIndex, Arrays.toString(array));
             }
             else {
                 double[] array2 = Arrays.copyOf(array, 200);
-                return String.format("%s[length=%d, chunks=%d]%s...", getClass().getSimpleName(), array.length,
+                return String.format("%s[length=%d, chunks=%d]%s...",
+                                     getClass().getSimpleName(), array.length,
                                      spineIndex, Arrays.toString(array2));
             }
         }
