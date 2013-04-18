@@ -50,10 +50,39 @@ public class StreamBuilderTest {
         System.out.println("  average: " + ((double) tSum / n) + " ns");
     }
 
-    public static void main(String[] args) {
+    static void testNSeqPar() {
         System.out.println("Sequential:");
         testN(10, false);
         System.out.println("Parallel:");
         testN(10, true);
+    }
+
+    static void testParLongop() {
+        StreamBuilder.OfInt builder = Streams.intBuilder();
+        for (int i = 0; i < 5000000; i++) {
+            builder.accept(i);
+        }
+
+        long t0 = System.nanoTime();
+        long sum = builder.build().parallel()
+            .map(i -> {
+                return i;
+            })
+            .sum();
+        long t = System.nanoTime() - t0;
+        System.out.println("sum=" + sum + " in " + t + " ns");
+    }
+
+    public static void main(String[] args) {
+        testParLongop();
+        testParLongop();
+        testParLongop();
+        testParLongop();
+        testParLongop();
+        testParLongop();
+        testParLongop();
+        testParLongop();
+        testParLongop();
+        testParLongop();
     }
 }
