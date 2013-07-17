@@ -216,6 +216,13 @@ public class SplittableRandom {
         this.nextSplit = s;
     }
 
+    /** XXXX Testing */
+    public SplittableRandom(long seed, long gamma, Error XXXX) {
+        this.seed = seed;
+        this.gamma = gamma;
+        this.nextSplit = seed;
+    }
+
     /**
      * Adds the given gamma value, g, to the given seed value s, mod
      * George (2^64+13). We regard s and g as unsigned values
@@ -241,7 +248,7 @@ public class SplittableRandom {
      * Updates in-place and returns seed.
      * See above for explanation.
      */
-    private long nextSeed() {
+    final public long nextSeed() {
         return seed = addGammaModGeorge(seed, gamma);
     }
 
