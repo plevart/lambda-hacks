@@ -118,7 +118,7 @@ public class Test {
 
     static class TestRunner {
         final int cpus = Runtime.getRuntime().availableProcessors();
-        final BlockingQueue<Runnable> taskQueue = new LinkedBlockingQueue<>(8);
+        final BlockingQueue<Runnable> taskQueue = new LinkedBlockingQueue<>(cpus * 4);
         final ExecutorService exe = new ThreadPoolExecutor(
             cpus, cpus,
             0L, TimeUnit.MILLISECONDS,
