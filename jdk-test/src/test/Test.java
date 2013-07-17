@@ -93,6 +93,10 @@ public class Test {
                 }
             } finally {
                 try {
+                    // sometimes when writing to pipe throws IOException
+                    // with "Broken pipe" or "Stream closed" the stream is
+                    // already closed, so the following close will throw
+                    // IOException "Already closed" and we ignore it.
                     out.close();
                 } catch (IOException ignore) {}
             }
@@ -171,15 +175,13 @@ public class Test {
         TestRunner runner = new TestRunner();
 
         for (int testId : new int[]{
-            0, 1, 2, 3, 4, 8, 9, 10,
-            /* 11, 12, */ // commented-out tests don't finish in reasonable time for some inputs
-            13, 15, 16,
-            /* 17, */
-            100, 101, 102, 200, 201, 202,
-            203, 204, 205, 206, 207, 208, 209
+            0, 1, 2, 3, 4, 8, 9, 10, 11, 12, 13, 15, 16, 17,
+            100, 101, 102,
+            200, 201, 202, 203, 204, 205, 206, 207, 208, 209
         }) {
             runner.header(String.format("\nTest id=%d\n", testId));
-            for (int ones = 0; ones <= 64; ones++) {
+
+            for (int ones = 1; ones < 64; ones++) {
                 long seed = 0L;
                 long gamma = 0L;
                 for (int j = 0; j < ones; j++) {
@@ -191,11 +193,15 @@ public class Test {
                         }
                     }
                 }
+
+                String[] cmd = testId == 200
+                    ? new String[] { "dieharder", "-g", "200", "-d", String.valueOf(testId), "-n", "3" }
+                    : new String[] { "dieharder", "-g", "200", "-d", String.valueOf(testId) };
+
                 runner.run(new TestTask(
-                    String.format("%2d ones, seed=%d, gamma=%s - %%s",
-                        ones, seed, toBinaryString64(gamma)),
+                    String.format("%2d ones, seed=%d, gamma=%s - %%s", ones, seed, toBinaryString64(gamma)),
                     seed, gamma,
-                    "dieharder", "-g", "200", "-d", String.valueOf(testId)
+                    cmd
                 ));
             }
         }
