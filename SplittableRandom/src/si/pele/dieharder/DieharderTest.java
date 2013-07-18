@@ -153,4 +153,22 @@ public class DieharderTest<RNG> implements Callable<String> {
             assBuilder.toString()
         );
     }
+
+    public static class Header implements Callable<String> {
+        static final String headerFormat = String.format(headerMetaFormat,
+            "test name", "ntup", "tsamples", "psamples", "pvalue", "assessment(s)");
+
+        final String headerPrefix;
+
+        public Header(String headerPrefix) {
+            this.headerPrefix = headerPrefix;
+        }
+
+        @Override
+        public String call() throws Exception {
+            String header = String.format(headerFormat, headerPrefix);
+            String delimiter = header.replaceAll("[^\\|]", "-");
+            return delimiter + "\n" + header + "\n" + delimiter;
+        }
+    }
 }

@@ -1,6 +1,5 @@
 package sr;
 
-import si.pele.dieharder.DieharderHeader;
 import si.pele.dieharder.DieharderTest;
 
 import java.util.ArrayList;
@@ -14,7 +13,7 @@ import java.util.concurrent.Executors;
 import java.util.concurrent.Future;
 
 /**
- * @author peter
+ * @author peter.levart@gmail.com
  */
 public class Test {
 
@@ -40,7 +39,7 @@ public class Test {
         String resultPrefixFormat = " %5d | %16x | %64s ";
 
         for (int testId : testIds) {
-            results.add(exe.submit(new DieharderHeader(
+            results.add(exe.submit(new DieharderTest.Header(
                 String.format(headerPrefixFormat, "ones", "seed", "gamma")
             )));
 
@@ -64,12 +63,9 @@ public class Test {
                     (buf, sr) -> {
                         for (int i = 0; i < buf.length; ) {
                             int x = sr.nextInt();
-                            buf[i++] = (byte) (x & 0xFF);
-                            x >>>= 8;
-                            buf[i++] = (byte) (x & 0xFF);
-                            x >>>= 8;
-                            buf[i++] = (byte) (x & 0xFF);
-                            x >>>= 8;
+                            buf[i++] = (byte) (x & 0xFF); x >>>= 8;
+                            buf[i++] = (byte) (x & 0xFF); x >>>= 8;
+                            buf[i++] = (byte) (x & 0xFF); x >>>= 8;
                             buf[i++] = (byte) x;
                         }
                     }
@@ -80,12 +76,6 @@ public class Test {
         for (Future<String> result : results) {
             System.out.println(result.get());
         }
-    }
-
-    private static int mix32(long z) {
-        z ^= (z >>> 33);
-        z *= 0xc4ceb9fe1a85ec53L;
-        return (int) (z >>> 32);
     }
 
     private static int mix32alt(long z) {
