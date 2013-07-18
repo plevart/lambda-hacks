@@ -2,8 +2,7 @@
 <project version="4">
   <component name="ProjectModuleManager">
     <modules>
-      <module fileurl="file://$PROJECT_DIR$/jdk/jdk.iml" filepath="$PROJECT_DIR$/jdk/jdk.iml" />
-      <module fileurl="file://$PROJECT_DIR$/jdk-test/jdk-test.iml" filepath="$PROJECT_DIR$/jdk-test/jdk-test.iml" />
+      <module fileurl="file://$PROJECT_DIR$/SplittableRandom/SplittableRandom.iml" filepath="$PROJECT_DIR$/SplittableRandom/SplittableRandom.iml" />
       <module fileurl="file://$PROJECT_DIR$/../micro-bench/micro-bench.iml" filepath="$PROJECT_DIR$/../micro-bench/micro-bench.iml" />
     </modules>
   </component>

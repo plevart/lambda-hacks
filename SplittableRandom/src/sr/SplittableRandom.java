@@ -23,7 +23,7 @@
  * questions.
  */
 
-package test;
+package sr;
 
 import java.util.concurrent.atomic.AtomicLong;
 import java.util.Spliterator;
