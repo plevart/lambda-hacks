@@ -183,10 +183,15 @@ public class SplittableRandom {
     private static final AtomicLong defaultSeedGenerator =
         new AtomicLong(System.nanoTime());
 
+    private long k0, k1, k2, k3, k4, k5, k6, k7; // filler
+    private long nextIntBuffer = ~0L;
+
     /**
      * The seed, updated only via method nextSeed.
      */
     private long seed;
+
+    private long l0, l1, l2, l3, l4, l5, l6, l7; // filler
 
     /**
      * The constant value added to seed (mod George) on each update.
@@ -441,6 +446,19 @@ public class SplittableRandom {
      */
     public int nextInt() {
         return mix32(nextSeed());
+    }
+
+    public int nextIntAlt1() {
+        return (int) mix64(nextSeed());
+    }
+
+    public int nextIntAlt2() {
+        int h = (int) nextSeed();
+        h ^= h >> 16;
+        h *= 0x85ebca6b;
+        h ^= h >> 13;
+        h *= 0xc2b2ae35;
+        return h ^ (h >> 16);
     }
 
     /**
