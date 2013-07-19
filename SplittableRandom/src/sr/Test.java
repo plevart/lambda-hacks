@@ -117,7 +117,7 @@ public class Test {
                     futures.add(exe.submit(new DieharderTest<>(
                         testId, testOpts.get(testId),
                         new SRInfo(seed, gamma),
-                        new SplittableRandom(seed, gamma, null), new byte[32768],
+                        new SplittableRandom(seed, gamma, null), new byte[65536],
                         bufferFiller
                     )));
                 }
