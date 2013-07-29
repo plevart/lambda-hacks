@@ -1,4 +1,4 @@
-SplittableRandom.nextIntAlt()
+SplittableRandom.nextIntAlt2()
 
 ------------------|---------------------------------------------------------------------|-----|----------------------|---------|----------|----------|-------------------------|--------------
              seed |                                                            gamma 1s | Tid |            test name |    ntup | tsamples | psamples |                  pvalue | assessment(s)

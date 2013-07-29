@@ -30,33 +30,33 @@ public class Test {
     public static void main(String[] args) throws Exception {
 
 
-//        System.out.println("\nSplittableRandom.nextInt()\n");
-//        doTests(
-//            (sr, buf) -> {
-//                for (int i = 0; i < buf.length; ) {
-//                    int x = sr.nextInt();
-//                    buf[i++] = (byte) (x & 0xFF);
-//                    buf[i++] = (byte) ((x >>>= 8) & 0xFF);
-//                    buf[i++] = (byte) ((x >>>= 8) & 0xFF);
-//                    buf[i++] = (byte) (x >>> 8);
-//                }
-//            },
-//            testIds
-//        );
+        System.out.println("\nSplittableRandom.nextInt()\n");
+        doTests(
+            (sr, buf) -> {
+                for (int i = 0; i < buf.length; ) {
+                    int x = sr.nextInt();
+                    buf[i++] = (byte) (x & 0xFF);
+                    buf[i++] = (byte) ((x >>>= 8) & 0xFF);
+                    buf[i++] = (byte) ((x >>>= 8) & 0xFF);
+                    buf[i++] = (byte) (x >>> 8);
+                }
+            },
+            testIds
+        );
 
-//        System.out.println("\nSplittableRandom.nextIntAlt1()\n");
-//        doTests(
-//            (sr, buf) -> {
-//                for (int i = 0; i < buf.length; ) {
-//                    int x = sr.nextIntAlt1();
-//                    buf[i++] = (byte) (x & 0xFF);
-//                    buf[i++] = (byte) ((x >>>= 8) & 0xFF);
-//                    buf[i++] = (byte) ((x >>>= 8) & 0xFF);
-//                    buf[i++] = (byte) (x >>> 8);
-//                }
-//            },
-//            testIds
-//        );
+        System.out.println("\nSplittableRandom.nextIntAlt1()\n");
+        doTests(
+            (sr, buf) -> {
+                for (int i = 0; i < buf.length; ) {
+                    int x = sr.nextIntAlt1();
+                    buf[i++] = (byte) (x & 0xFF);
+                    buf[i++] = (byte) ((x >>>= 8) & 0xFF);
+                    buf[i++] = (byte) ((x >>>= 8) & 0xFF);
+                    buf[i++] = (byte) (x >>> 8);
+                }
+            },
+            testIds
+        );
 
         System.out.println("\nSplittableRandom.nextIntAlt2()\n");
         doTests(
