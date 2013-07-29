@@ -1,0 +1,98 @@
+# Measurement Section
+# Runtime (per iteration): 5s
+# Iterations: 8
+# Thread counts (concurrent threads per iteration): [1, 1, 1, 1, 1, 1, 1, 1]
+# Threads will synchronize iterations
+# Running: sr.generated.throughput.JmhTest.SR_nextInt
+# Warmup Iteration   1 (3s in 1 thread): 471714.655 ops/msec
+# Warmup Iteration   2 (3s in 1 thread): 467063.694 ops/msec
+# Warmup Iteration   3 (3s in 1 thread): 478947.650 ops/msec
+# Warmup Iteration   4 (3s in 1 thread): 479057.141 ops/msec
+Iteration   1 (5s in 1 thread): 478636.827 ops/msec
+Iteration   2 (5s in 1 thread): 478916.431 ops/msec
+Iteration   3 (5s in 1 thread): 477095.691 ops/msec
+Iteration   4 (5s in 1 thread): 476916.194 ops/msec
+Iteration   5 (5s in 1 thread): 477123.354 ops/msec
+Iteration   6 (5s in 1 thread): 477257.623 ops/msec
+Iteration   7 (5s in 1 thread): 479106.621 ops/msec
+Iteration   8 (5s in 1 thread): 477184.620 ops/msec
+
+Run result: 477779.670 ±(95%) 777.771 ±(99%) 1151.048 ops/msec
+Run statistics: min = 476916.194, avg = 477779.670, max = 479106.621, stdev = 930.325
+Run confidence intervals: 95% [477001.899, 478557.441], 99% [476628.622, 478930.718]
+
+
+# Runtime (per iteration): 5s
+# Iterations: 8
+# Thread counts (concurrent threads per iteration): [1, 1, 1, 1, 1, 1, 1, 1]
+# Threads will synchronize iterations
+# Running: sr.generated.throughput.JmhTest.SR_nextIntAlt1
+# Warmup Iteration   1 (3s in 1 thread): 384009.243 ops/msec
+# Warmup Iteration   2 (3s in 1 thread): 385093.843 ops/msec
+# Warmup Iteration   3 (3s in 1 thread): 385995.331 ops/msec
+# Warmup Iteration   4 (3s in 1 thread): 386193.002 ops/msec
+Iteration   1 (5s in 1 thread): 386331.704 ops/msec
+Iteration   2 (5s in 1 thread): 386254.193 ops/msec
+Iteration   3 (5s in 1 thread): 385251.774 ops/msec
+Iteration   4 (5s in 1 thread): 385428.670 ops/msec
+Iteration   5 (5s in 1 thread): 385439.160 ops/msec
+Iteration   6 (5s in 1 thread): 385420.303 ops/msec
+Iteration   7 (5s in 1 thread): 385501.353 ops/msec
+Iteration   8 (5s in 1 thread): 385418.953 ops/msec
+
+Run result: 385630.764 ±(95%) 347.164 ±(99%) 513.779 ops/msec
+Run statistics: min = 385251.774, avg = 385630.764, max = 386331.705, stdev = 415.258
+Run confidence intervals: 95% [385283.600, 385977.928], 99% [385116.984, 386144.543]
+
+
+# Runtime (per iteration): 5s
+# Iterations: 8
+# Thread counts (concurrent threads per iteration): [1, 1, 1, 1, 1, 1, 1, 1]
+# Threads will synchronize iterations
+# Running: sr.generated.throughput.JmhTest.SR_nextIntAlt2
+# Warmup Iteration   1 (3s in 1 thread): 399948.753 ops/msec
+# Warmup Iteration   2 (3s in 1 thread): 399066.385 ops/msec
+# Warmup Iteration   3 (3s in 1 thread): 432026.387 ops/msec
+# Warmup Iteration   4 (3s in 1 thread): 432192.850 ops/msec
+Iteration   1 (5s in 1 thread): 432375.475 ops/msec
+Iteration   2 (5s in 1 thread): 432437.208 ops/msec
+Iteration   3 (5s in 1 thread): 432441.135 ops/msec
+Iteration   4 (5s in 1 thread): 431628.820 ops/msec
+Iteration   5 (5s in 1 thread): 431423.586 ops/msec
+Iteration   6 (5s in 1 thread): 431504.788 ops/msec
+Iteration   7 (5s in 1 thread): 432429.516 ops/msec
+Iteration   8 (5s in 1 thread): 432334.996 ops/msec
+
+Run result: 432071.940 ±(95%) 386.654 ±(99%) 572.221 ops/msec
+Run statistics: min = 431423.586, avg = 432071.940, max = 432441.135, stdev = 462.493
+Run confidence intervals: 95% [431685.287, 432458.594], 99% [431499.719, 432644.162]
+
+
+# Runtime (per iteration): 5s
+# Iterations: 8
+# Thread counts (concurrent threads per iteration): [1, 1, 1, 1, 1, 1, 1, 1]
+# Threads will synchronize iterations
+# Running: sr.generated.throughput.JmhTest.TLR_nextInt
+# Warmup Iteration   1 (3s in 1 thread): 387614.805 ops/msec
+# Warmup Iteration   2 (3s in 1 thread): 390000.966 ops/msec
+# Warmup Iteration   3 (3s in 1 thread): 382332.425 ops/msec
+# Warmup Iteration   4 (3s in 1 thread): 382339.716 ops/msec
+Iteration   1 (5s in 1 thread): 382348.412 ops/msec
+Iteration   2 (5s in 1 thread): 382339.485 ops/msec
+Iteration   3 (5s in 1 thread): 382280.837 ops/msec
+Iteration   4 (5s in 1 thread): 382331.617 ops/msec
+Iteration   5 (5s in 1 thread): 382341.150 ops/msec
+Iteration   6 (5s in 1 thread): 382329.850 ops/msec
+Iteration   7 (5s in 1 thread): 382356.306 ops/msec
+Iteration   8 (5s in 1 thread): 382347.667 ops/msec
+
+Run result: 382334.416 ±(95%) 19.533 ±(99%) 28.907 ops/msec
+Run statistics: min = 382280.837, avg = 382334.416, max = 382356.306, stdev = 23.364
+Run confidence intervals: 95% [382314.883, 382353.948], 99% [382305.509, 382363.323]
+
+
+Benchmark                      Thr    Cnt  Sec         Mean   Mean error          Var    Units
+s.g.t.JmhTest.SR_nextInt         1      8    5   477779.670     1151.048   865504.410 ops/msec
+s.g.t.JmhTest.SR_nextIntAlt1     1      8    5   385630.764      513.779   172439.034 ops/msec
+s.g.t.JmhTest.SR_nextIntAlt2     1      8    5   432071.940      572.221   213899.640 ops/msec
+s.g.t.JmhTest.TLR_nextInt        1      8    5   382334.416       28.907      545.871 ops/msec

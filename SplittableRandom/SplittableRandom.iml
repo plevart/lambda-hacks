@@ -8,6 +8,9 @@
     <orderEntry type="inheritedJdk" />
     <orderEntry type="sourceFolder" forTests="false" />
     <orderEntry type="module" module-name="micro-bench" />
+    <orderEntry type="library" name="jmh-core-1.1-SNAPSHOT" level="project" />
+    <orderEntry type="library" name="args4j:args4j:2.0.25" level="project" />
+    <orderEntry type="library" name="org.apache.commons:commons-math:2.2" level="project" />
   </component>
 </module>
 

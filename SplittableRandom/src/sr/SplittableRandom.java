@@ -452,13 +452,23 @@ public class SplittableRandom {
         return (int) mix64(nextSeed());
     }
 
+    private int nextInt;
+    private boolean nextIntZero;
+
     public int nextIntAlt2() {
-        int h = (int) nextSeed();
-        h ^= h >> 16;
-        h *= 0x85ebca6b;
-        h ^= h >> 13;
-        h *= 0xc2b2ae35;
-        return h ^ (h >> 16);
+        if (nextInt != 0) {
+            int result = nextInt;
+            nextInt = 0;
+            return result;
+        } else if (nextIntZero) {
+            nextIntZero = false;
+            return 0;
+        } else {
+            long nextLong = mix64(nextSeed());
+            nextInt = (int)(nextLong >>> 32);
+            if (nextInt == 0) nextIntZero = true;
+            return (int)(nextLong & 0xFFFFFFFFL);
+        }
     }
 
     /**

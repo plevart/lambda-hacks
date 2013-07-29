@@ -18,7 +18,8 @@ import java.util.function.BiConsumer;
  */
 public class Test {
 
-    static final int[] testIds = {
+    static final int[] testIds = { 0, 1, 2 };
+    static final int[] testIds2 = {
         // dieharder tests to run
         0, 1, 2, 3, 4, 8, 9, 10, 11, 12, 13, 15, 16,
         /* 17, */ // 17 takes very long time to complete
@@ -28,43 +29,40 @@ public class Test {
 
     public static void main(String[] args) throws Exception {
 
-        System.out.println("\nSplittableRandom.nextLong()\n");
-        doTests(
-            (sr, buf) -> {
-                for (int i = 0; i < buf.length; ) {
-                    long x = sr.nextLong();
-                    buf[i++] = (byte) (x & 0xFFL);
-                    buf[i++] = (byte) ((x >>>= 8) & 0xFFL);
-                    buf[i++] = (byte) ((x >>>= 8) & 0xFFL);
-                    buf[i++] = (byte) ((x >>>= 8) & 0xFFL);
-                    buf[i++] = (byte) ((x >>>= 8) & 0xFFL);
-                    buf[i++] = (byte) ((x >>>= 8) & 0xFFL);
-                    buf[i++] = (byte) ((x >>>= 8) & 0xFFL);
-                    buf[i++] = (byte) (x >>> 8);
-                }
-            },
-            testIds
-        );
+
+//        System.out.println("\nSplittableRandom.nextInt()\n");
+//        doTests(
+//            (sr, buf) -> {
+//                for (int i = 0; i < buf.length; ) {
+//                    int x = sr.nextInt();
+//                    buf[i++] = (byte) (x & 0xFF);
+//                    buf[i++] = (byte) ((x >>>= 8) & 0xFF);
+//                    buf[i++] = (byte) ((x >>>= 8) & 0xFF);
+//                    buf[i++] = (byte) (x >>> 8);
+//                }
+//            },
+//            testIds
+//        );
+
+//        System.out.println("\nSplittableRandom.nextIntAlt1()\n");
+//        doTests(
+//            (sr, buf) -> {
+//                for (int i = 0; i < buf.length; ) {
+//                    int x = sr.nextIntAlt1();
+//                    buf[i++] = (byte) (x & 0xFF);
+//                    buf[i++] = (byte) ((x >>>= 8) & 0xFF);
+//                    buf[i++] = (byte) ((x >>>= 8) & 0xFF);
+//                    buf[i++] = (byte) (x >>> 8);
+//                }
+//            },
+//            testIds
+//        );
 
         System.out.println("\nSplittableRandom.nextIntAlt2()\n");
         doTests(
             (sr, buf) -> {
                 for (int i = 0; i < buf.length; ) {
                     int x = sr.nextIntAlt2();
-                    buf[i++] = (byte) (x & 0xFF);
-                    buf[i++] = (byte) ((x >>>= 8) & 0xFF);
-                    buf[i++] = (byte) ((x >>>= 8) & 0xFF);
-                    buf[i++] = (byte) (x >>> 8);
-                }
-            },
-            testIds
-        );
-
-        System.out.println("\nSplittableRandom.nextInt()\n");
-        doTests(
-            (sr, buf) -> {
-                for (int i = 0; i < buf.length; ) {
-                    int x = sr.nextInt();
                     buf[i++] = (byte) (x & 0xFF);
                     buf[i++] = (byte) ((x >>>= 8) & 0xFF);
                     buf[i++] = (byte) ((x >>>= 8) & 0xFF);
